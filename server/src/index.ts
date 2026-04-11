@@ -21,7 +21,7 @@ const db = admin.firestore();
 
 // Usage limits by tier
 const USAGE_LIMITS = {
-  free: 5,       // 5 total messages, no reset
+  free: 25,      // 25 total messages, no reset
   premium: 500,  // 500 messages per month
 } as const;
 
@@ -292,7 +292,7 @@ app.post('/api/ai/message', async (req, res) => {
       if (error instanceof Error) {
         if (error.message === 'FREE_LIMIT_REACHED') {
           res.status(429).json({
-            error: 'You\'ve used all 5 free AI messages. Upgrade to Premium for more.',
+            error: 'You\'ve used all 25 free AI messages. Upgrade to Premium for more.',
             code: 'FREE_LIMIT_REACHED',
           });
           return;
@@ -329,7 +329,7 @@ app.post('/api/ai/message', async (req, res) => {
     const client = new Anthropic({ apiKey: claudeApiKey });
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 4096,
       system: `${SYSTEM_PROMPT}\n\n${scheduleContext}`,
       messages: messages.map((msg) => ({

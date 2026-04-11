@@ -4,6 +4,8 @@ import type { Schedule } from '../types/schedule';
 import { getUserSchedules } from '../services/scheduleService';
 import { getBillingStatus, createCheckoutSession, openCustomerPortal } from '../services/billingService';
 import type { BillingStatus } from '../services/billingService';
+import { getUsage } from '../services/aiService';
+import type { UsageInfo } from '../services/aiService';
 import Footer from './Footer';
 
 interface SettingsPageProps {
@@ -18,6 +20,7 @@ export default function SettingsPage({ user }: SettingsPageProps) {
   const [billing, setBilling] = useState<BillingStatus | null>(null);
   const [billingLoading, setBillingLoading] = useState(true);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [aiUsage, setAiUsage] = useState<UsageInfo | null>(null);
 
   // Load all schedules
   useEffect(() => {
@@ -39,8 +42,12 @@ export default function SettingsPage({ user }: SettingsPageProps) {
   useEffect(() => {
     const loadBilling = async () => {
       try {
-        const billingData = await getBillingStatus();
+        const [billingData, usageData] = await Promise.all([
+          getBillingStatus(),
+          getUsage().catch(() => null),
+        ]);
         setBilling(billingData);
+        setAiUsage(usageData);
       } catch {
         // User may not have billing set up yet
       } finally {
@@ -209,6 +216,23 @@ export default function SettingsPage({ user }: SettingsPageProps) {
                       ? 'Full AI assistant access'
                       : 'Basic AI assistant access'}
                   </p>
+                  {billing?.tier === 'free' && aiUsage && (
+                    <div className="mt-2">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">AI messages used</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">{aiUsage.used} / {aiUsage.limit}</span>
+                      </div>
+                      <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            aiUsage.used / aiUsage.limit > 0.85 ? 'bg-red-400' :
+                            aiUsage.used / aiUsage.limit > 0.6 ? 'bg-amber-400' : 'bg-blue-400'
+                          }`}
+                          style={{ width: `${Math.min(100, (aiUsage.used / aiUsage.limit) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

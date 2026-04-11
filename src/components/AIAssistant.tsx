@@ -300,6 +300,11 @@ export default function AIAssistant({ timeBlocks, onApplySchedule, messages, set
                 </button>
               ))}
             </div>
+
+            {/* Free tier usage indicator */}
+            {usage && usage.tier === 'free' && (
+              <p className="mt-3 text-xs text-center text-gray-400 dark:text-gray-500">{usage.used} / {usage.limit} free messages used</p>
+            )}
           </div>
         </div>
       ) : (
@@ -486,6 +491,11 @@ export default function AIAssistant({ timeBlocks, onApplySchedule, messages, set
                 {usage?.tier === 'free' ? 'Upgrade to Premium to continue chatting' : 'Message limit reached. Resets on the 1st.'}
               </p>
             ) : inputBox}
+
+            {/* Free tier usage indicator */}
+            {usage && usage.tier === 'free' && !rateLimited && (
+              <p className="mt-2 text-xs text-center text-gray-400 dark:text-gray-500">{usage.used} / {usage.limit} free messages used</p>
+            )}
           </div>
         </>
       )}

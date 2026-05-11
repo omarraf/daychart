@@ -281,7 +281,27 @@ export default function AIAssistant({ timeBlocks, onApplySchedule, messages, set
 
           <div className="w-full max-w-xl">
             {!emailVerified ? (
-              <p className="text-sm text-center text-gray-500 dark:text-gray-400 py-3">Verify your email to start chatting</p>
+              <div className="px-4 py-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-center">
+                <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">Verify your email to use the AI assistant</p>
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">Check your inbox (and spam folder) for a verification link.</p>
+                <button
+                  onClick={async () => {
+                    setIsResending(true);
+                    try {
+                      await resendVerificationEmail();
+                      alert('Verification email sent! Check your inbox and spam folder.');
+                    } catch {
+                      alert('Failed to send verification email. Please try again.');
+                    } finally {
+                      setIsResending(false);
+                    }
+                  }}
+                  disabled={isResending}
+                  className="mt-3 px-4 py-1.5 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50"
+                >
+                  {isResending ? 'Sending...' : 'Resend verification email'}
+                </button>
+              </div>
             ) : rateLimited ? (
               <p className="text-sm text-center text-gray-500 dark:text-gray-400 py-3">
                 {usage?.tier === 'free' ? 'Upgrade to Premium to continue chatting' : 'Message limit reached. Resets on the 1st.'}
@@ -414,7 +434,7 @@ export default function AIAssistant({ timeBlocks, onApplySchedule, messages, set
               <div className="flex items-start gap-3">
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">Verify your email to use AI</p>
-                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">Check your inbox for a verification link.</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">Check your inbox and spam folder for a verification link.</p>
                   <div className="flex gap-2 mt-2">
                     <button
                       onClick={async () => {
@@ -485,7 +505,7 @@ export default function AIAssistant({ timeBlocks, onApplySchedule, messages, set
           {/* Input Area */}
           <div className="px-4 sm:px-6 py-3 flex-shrink-0">
             {!emailVerified ? (
-              <p className="text-sm text-center text-gray-500 dark:text-gray-400 py-2">Verify your email to start chatting</p>
+              <p className="text-xs text-center text-amber-700 dark:text-amber-400 py-2">Check your inbox and spam folder for the verification link.</p>
             ) : rateLimited ? (
               <p className="text-sm text-center text-gray-500 dark:text-gray-400 py-2">
                 {usage?.tier === 'free' ? 'Upgrade to Premium to continue chatting' : 'Message limit reached. Resets on the 1st.'}

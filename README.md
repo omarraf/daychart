@@ -54,6 +54,37 @@ Have an idea? [Open an issue](https://github.com/omarraf/time-tracker/issues) or
 
 ---
 
+## AI backend deployment (Railway)
+
+Deploy `server/` as the Railway service root. Set `FIREBASE_PROJECT_ID`,
+`GOOGLE_SERVICE_ACCOUNT` (the Firebase service account JSON), and `CLAUDE_API_KEY`
+in the service's environment variables.
+
+Set `FRONTEND_URL=https://daychart.fyi` on Railway. This is also used for billing
+redirects. CORS allows `https://daychart.fyi`, `https://www.daychart.fyi`, local Vite
+ports 5173 and 5174, and Vercel deployments. Additional frontend origins can be
+provided in `CORS_ALLOWED_ORIGINS` as comma-separated HTTP(S) URLs.
+Configured URLs are normalized to their origins, including removal of trailing slashes.
+
+Set `VITE_API_URL=https://<your-service>.up.railway.app` in the frontend hosting
+environment **before building**, then rebuild/redeploy the frontend. Without this
+variable, the frontend calls `http://localhost:3001` on the user's computer.
+Redeploy Railway after changing backend code or environment variables.
+
+To check CORS without invoking AI or using a user's token:
+
+```sh
+curl -i -X OPTIONS 'https://<your-service>.up.railway.app/api/ai/message' \
+  -H 'Origin: https://daychart.fyi' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: authorization,content-type'
+```
+
+Expect HTTP 204 with `Access-Control-Allow-Origin: https://daychart.fyi`, POST
+among the allowed methods, and Authorization and Content-Type among the allowed
+headers. If `/health` fails too, check Railway service health and logs first;
+an upstream error without CORS headers can also appear as a browser CORS error.
+
 ## Contributing
 
 Contributions are welcome! Whether it's bug reports, feature requests, or code contributions:

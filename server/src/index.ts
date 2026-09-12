@@ -3,6 +3,7 @@ import cors from 'cors';
 import Anthropic from '@anthropic-ai/sdk';
 import * as admin from 'firebase-admin';
 import Stripe from 'stripe';
+import { corsOptions } from './cors';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -117,28 +118,7 @@ async function checkAndIncrementUsage(uid: string): Promise<{ remaining: number;
 }
 
 // CORS - allow your frontend origins
-app.use(cors({
-  origin: (origin, callback) => {
-    const allowed = [
-      'http://localhost:5173',
-      'http://localhost:5174',
-    ];
-
-    // Add explicit frontend URL if set
-    if (process.env.FRONTEND_URL) {
-      allowed.push(process.env.FRONTEND_URL);
-    }
-
-    // Allow any Vercel preview deployment
-    if (!origin || allowed.includes(origin) || /\.vercel\.app$/.test(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+app.use(cors(corsOptions));
 
 // Stripe webhook needs raw body — must be before express.json()
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }));

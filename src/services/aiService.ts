@@ -38,7 +38,12 @@ async function getAuthToken(): Promise<string> {
   if (!user) {
     throw new Error('Please sign in to use the AI assistant.');
   }
-  return user.getIdToken();
+  const tokenResult = await user.getIdTokenResult();
+  if (tokenResult.claims.email_verified !== true) {
+    await user.reload();
+    return user.getIdToken(true);
+  }
+  return tokenResult.token;
 }
 
 /**

@@ -194,17 +194,20 @@ export default function Dashboard() {
     setShowLabelModal(true);
   };
 
-  const handleSaveBlock = (label: string, color: string) => {
+  const handleSaveBlock = (label: string, color: string, startTime: string, endTime: string) => {
+    const validation = validateTimeBlock({ startTime, endTime }, timeBlocks, editingBlock?.id);
+    if (!validation.valid) return validation.message;
+
     if (editingBlock) {
       setTimeBlocks((prev) =>
-        prev.map((b) => (b.id === editingBlock.id ? { ...b, label, color } : b))
+        sortTimeBlocks(prev.map((block) => (block.id === editingBlock.id ? { ...block, label, color, startTime, endTime } : block)))
       );
       setEditingBlock(null);
     } else if (pendingBlock) {
       const newBlock: TimeBlock = {
         id: crypto.randomUUID(),
-        startTime: pendingBlock.startTime,
-        endTime: pendingBlock.endTime,
+        startTime,
+        endTime,
         label,
         color,
         order: timeBlocks.length,
@@ -213,6 +216,15 @@ export default function Dashboard() {
       setPendingBlock(null);
     }
     setShowLabelModal(false);
+  };
+
+  const handleBlockChanged = (updatedBlock: TimeBlock) => {
+    const validation = validateTimeBlock(updatedBlock, timeBlocks, updatedBlock.id);
+    if (!validation.valid) return;
+    setTimeBlocks((previous) => sortTimeBlocks(previous.map((block) =>
+      block.id === updatedBlock.id ? updatedBlock : block
+    )));
+    setActiveBlock(null);
   };
 
   const handleDeleteBlock = () => {
@@ -525,6 +537,7 @@ export default function Dashboard() {
         <div ref={chartContainerRef} className="absolute inset-0 flex items-center justify-center">
           <CircularChart
             timeBlocks={timeBlocks}
+            onBlockChanged={handleBlockChanged}
             onBlockCreated={handleBlockCreated}
             onBlockClick={handleBlockClick}
             activeBlock={activeBlock}

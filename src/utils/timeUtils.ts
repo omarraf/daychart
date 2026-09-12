@@ -50,6 +50,33 @@ export const calculateDuration = (start: string, end: string): number => {
   return endMinutes - startMinutes;
 };
 
+export const adjustTimeBlock = (
+  block: TimeBlock,
+  mode: 'move' | 'start' | 'end',
+  deltaMinutes: number
+): TimeBlock => {
+  const start = timeStringToMinutes(block.startTime);
+  const duration = calculateDuration(block.startTime, block.endTime);
+  const delta = snapToFiveMinutes(deltaMinutes);
+  let nextStart = start;
+  let nextEnd = start + duration;
+
+  if (mode === 'move') {
+    nextStart += delta;
+    nextEnd += delta;
+  } else if (mode === 'start') {
+    nextStart += Math.max(duration - 1435, Math.min(duration - 5, delta));
+  } else {
+    nextEnd += Math.max(5 - duration, Math.min(1435 - duration, delta));
+  }
+
+  return {
+    ...block,
+    startTime: minutesToTimeString(nextStart),
+    endTime: minutesToTimeString(nextEnd),
+  };
+};
+
 /**
  * Format duration as human-readable string
  * @param minutes Duration in minutes

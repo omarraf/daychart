@@ -22,6 +22,11 @@ DayChart helps you plan your day visually. Instead of writing lists, you draw yo
 
 🎨 **Intuitive Creation**
 - Drag to create time blocks
+- Drag an existing wheel block to move it while preserving its duration
+- Drag the dots at either end to resize a block in 5-minute increments
+- Click or tap a block to edit its start/end times, label, and color
+- Choose hours, five-minute steps, and AM/PM with the block's time pickers
+- Overnight blocks are supported; overlapping edits are rejected
 - Color-code your activities
 - Add custom labels and emojis
 - Works on desktop and mobile (touch-enabled)

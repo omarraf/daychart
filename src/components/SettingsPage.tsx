@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import type { User } from 'firebase/auth';
 import type { Schedule } from '../types/schedule';
 import { getUserSchedules } from '../services/scheduleService';
-import { getBillingStatus, createCheckoutSession, openCustomerPortal } from '../services/billingService';
-import type { BillingStatus } from '../services/billingService';
-import { getUsage } from '../services/aiService';
-import type { UsageInfo } from '../services/aiService';
+// Payment UI temporarily hidden; keep billing integration for re-enabling.
+// import { getBillingStatus, createCheckoutSession, openCustomerPortal } from '../services/billingService';
+// import type { BillingStatus } from '../services/billingService';
+// import { getUsage } from '../services/aiService';
+// import type { UsageInfo } from '../services/aiService';
 import Footer from './Footer';
 
 interface SettingsPageProps {
@@ -17,10 +18,10 @@ interface SettingsPageProps {
 export default function SettingsPage({ user }: SettingsPageProps) {
   const [allSchedules, setAllSchedules] = useState<Schedule[]>([]);
   const [selectedScheduleId, setSelectedScheduleId] = useState<string>('');
-  const [billing, setBilling] = useState<BillingStatus | null>(null);
-  const [billingLoading, setBillingLoading] = useState(true);
-  const [isCheckingOut, setIsCheckingOut] = useState(false);
-  const [aiUsage, setAiUsage] = useState<UsageInfo | null>(null);
+//   const [billing, setBilling] = useState<BillingStatus | null>(null);
+//   const [billingLoading, setBillingLoading] = useState(true);
+//   const [isCheckingOut, setIsCheckingOut] = useState(false);
+//   const [aiUsage, setAiUsage] = useState<UsageInfo | null>(null);
 
   // Load all schedules
   useEffect(() => {
@@ -38,24 +39,24 @@ export default function SettingsPage({ user }: SettingsPageProps) {
     loadSchedules();
   }, [user.uid]);
 
-  // Load billing status and usage
-  useEffect(() => {
-    const loadBilling = async () => {
-      try {
-        const [billingData, usageData] = await Promise.all([
-          getBillingStatus(),
-          getUsage().catch(() => null),
-        ]);
-        setBilling(billingData);
-        setAiUsage(usageData);
-      } catch {
-        // User may not have billing set up yet
-      } finally {
-        setBillingLoading(false);
-      }
-    };
-    loadBilling();
-  }, []);
+//   // Load billing status and usage
+//   useEffect(() => {
+//     const loadBilling = async () => {
+//       try {
+//         const [billingData, usageData] = await Promise.all([
+//           getBillingStatus(),
+//           getUsage().catch(() => null),
+//         ]);
+//         setBilling(billingData);
+//         setAiUsage(usageData);
+//       } catch {
+//         // User may not have billing set up yet
+//       } finally {
+//         setBillingLoading(false);
+//       }
+//     };
+//     loadBilling();
+//   }, []);
 
   const selectedSchedule = allSchedules.find(s => s.id === selectedScheduleId);
 
@@ -178,7 +179,7 @@ export default function SettingsPage({ user }: SettingsPageProps) {
           </div>
         </section>
 
-        {/* Subscription Section */}
+        {/* Subscription Section — temporarily hidden
         <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
             <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -196,7 +197,7 @@ export default function SettingsPage({ user }: SettingsPageProps) {
             <p className="text-sm text-gray-500 dark:text-gray-400">Could not load subscription info. Please try again later.</p>
           ) : (
             <div className="space-y-4">
-              {/* Current Plan */}
+              Current Plan
               <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
                 <div>
                   <div className="flex items-center gap-2">
@@ -236,7 +237,7 @@ export default function SettingsPage({ user }: SettingsPageProps) {
                 </div>
               </div>
 
-              {/* Action Buttons */}
+              Action Buttons
               {billing?.tier === 'premium' ? (
                 <div className="space-y-3">
                   <button
@@ -298,6 +299,7 @@ export default function SettingsPage({ user }: SettingsPageProps) {
             </div>
           )}
         </section>
+        */}
 
         {/* Export Section */}
         <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">

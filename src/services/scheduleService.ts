@@ -281,7 +281,7 @@ export const duplicateSchedule = async (
 
     const newSchedule = {
       name: newName || `${original.name} (Copy)`,
-      description: original.description,
+      ...(original.description !== undefined && { description: original.description }),
       timeBlocks: original.timeBlocks,
       isDefault: false,
       isTemplate: false,
@@ -291,6 +291,9 @@ export const duplicateSchedule = async (
     return await saveSchedule(userId, newSchedule);
   } catch (error) {
     console.error('Error duplicating schedule:', error);
+    if (error instanceof Error && error.message.includes('Maximum 10 schedules')) {
+      throw error;
+    }
     throw new Error('Failed to duplicate schedule');
   }
 };

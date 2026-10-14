@@ -330,8 +330,9 @@ export default function SchedulesPage({
                       )}
                       <button
                         onClick={() => handleDuplicate(schedule.id, schedule.name)}
-                        className="px-4 py-2 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm border-none"
-                        title="Duplicate"
+                        disabled={schedules.length >= 10}
+                        className="px-4 py-2 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm border-none disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={schedules.length >= 10 ? 'Maximum 10 schedules reached' : 'Duplicate'}
                       >
                         Duplicate
                       </button>

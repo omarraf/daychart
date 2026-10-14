@@ -70,6 +70,8 @@ export default function SchedulesPage({
   };
 
   const handleDuplicate = async (scheduleId: string, name: string) => {
+    if (!confirm(`Duplicate "${name}"?`)) return;
+
     try {
       await duplicateSchedule(scheduleId, user.uid, `${name} (Copy)`);
       await loadSchedules();

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { auth, isFirebaseConfigured } from '../firebase';
+import { auth } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import { signOutUser } from '../auth';
@@ -13,7 +13,7 @@ import FeedbackPage from './FeedbackPage';
 import AuthButtons from './AuthButtons';
 import AIAssistant from './AIAssistant';
 import type { DisplayMessage } from './AIAssistant';
-import Footer from './Footer';
+import LandingPage from './LandingPage';
 import type { NavRoute, TimeBlock } from '../types/schedule';
 import {
   saveSchedule,
@@ -348,118 +348,8 @@ export default function Dashboard() {
     );
   }
 
-  // Landing page for non-authenticated users
   if (!user && !isGuestMode) {
-    return (
-      <div className="min-h-screen overflow-y-auto overflow-x-hidden bg-white dark:bg-gray-950">
-        <AuthButtons />
-
-        <div className="flex items-center justify-center p-4 sm:p-8 pt-24 sm:pt-28 pb-16 min-h-screen">
-          <div className="max-w-2xl w-full">
-            <div className="text-center mb-10 sm:mb-14">
-              <h1
-                className="text-6xl sm:text-7xl lg:text-8xl font-black text-gray-900 dark:text-white mb-4 tracking-tight leading-none"
-                style={{ fontFamily: 'Outfit, sans-serif' }}
-              >
-                DayChart
-              </h1>
-              <p className="text-lg sm:text-xl text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-                Visual time management — plan your day on a 24-hour clock dial
-              </p>
-              <div className="lg:hidden mt-5 px-4">
-                <div className="inline-flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-full px-4 py-2 text-sm text-blue-700 dark:text-blue-300">
-                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Best experienced on desktop
-                </div>
-              </div>
-            </div>
-
-            <div className="text-center mb-10 sm:mb-14">
-              <button
-                onClick={() => setIsGuestMode(true)}
-                className="inline-flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-2xl font-bold text-lg shadow-xl shadow-blue-500/30 hover:bg-blue-700 hover:shadow-2xl hover:shadow-blue-500/40 hover:-translate-y-0.5 active:translate-y-0 transition-all border-none"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                Try It Free
-              </button>
-              <p className="mt-4 text-sm text-gray-400 dark:text-gray-500">
-                No account needed
-                {isFirebaseConfigured && (
-                  <>
-                    {' · '}
-                    <span
-                      onClick={() => {
-                        const btn = document.querySelector<HTMLButtonElement>('nav button');
-                        if (btn) btn.click();
-                      }}
-                      className="text-blue-500 cursor-pointer hover:text-blue-600 hover:underline transition-colors"
-                    >
-                      Sign in
-                    </span>
-                    {' '}to save & sync across devices
-                  </>
-                )}
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-10">
-              <div className="group bg-gray-50 dark:bg-gray-900 rounded-2xl p-5 border border-gray-100 dark:border-gray-800 hover:border-blue-200 dark:hover:border-blue-800 hover:shadow-md transition-all">
-                <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-1.5">Circular + Linear Views</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">24-hour clock dial or linear timeline — see your whole day at a glance</p>
-              </div>
-
-              <div className="group bg-gray-50 dark:bg-gray-900 rounded-2xl p-5 border border-gray-100 dark:border-gray-800 hover:border-purple-200 dark:hover:border-purple-800 hover:shadow-md transition-all">
-                <div className="w-12 h-12 rounded-xl bg-purple-100 dark:bg-purple-900/50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <svg className="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-                  </svg>
-                </div>
-                <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-1.5">Drag to Create</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">Click and drag on the dial or timeline to create color-coded time blocks instantly</p>
-              </div>
-
-              <div className="group bg-gray-50 dark:bg-gray-900 rounded-2xl p-5 border border-gray-100 dark:border-gray-800 hover:border-green-200 dark:hover:border-green-800 hover:shadow-md transition-all">
-                <div className="w-12 h-12 rounded-xl bg-green-100 dark:bg-green-900/50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                  </svg>
-                </div>
-                <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-1.5">Multiple Schedules</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">Save separate schedules for work days, weekends, travel, and more</p>
-              </div>
-
-              <div className="group bg-gray-50 dark:bg-gray-900 rounded-2xl p-5 border border-gray-100 dark:border-gray-800 hover:border-violet-200 dark:hover:border-violet-800 hover:shadow-md transition-all">
-                <div className="w-12 h-12 rounded-xl bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <svg className="w-6 h-6 text-violet-600 dark:text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                </div>
-                <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-1.5">AI Assistant</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">Describe your ideal day in plain text and let AI build the schedule for you</p>
-              </div>
-            </div>
-
-            {!isFirebaseConfigured && (
-              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 mb-6 text-center">
-                <p className="text-sm text-amber-800 dark:text-amber-300">
-                  Firebase not configured. Add your config to enable authentication and sync.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-        <Footer />
-      </div>
-    );
+    return <LandingPage onOpenPlanner={() => setIsGuestMode(true)} />;
   }
 
   const sortedBlocks = sortTimeBlocks(timeBlocks);
@@ -896,14 +786,7 @@ export default function Dashboard() {
           className="flex items-center gap-2.5 px-5 py-4"
           style={{ borderBottom: '1px solid var(--border)' }}
         >
-          <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: '#2563eb' }}
-          >
-            <svg width="14" height="14" fill="none" stroke="#fff" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
+          <img src="/favicon.svg" alt="" aria-hidden="true" className="h-7 w-7 flex-shrink-0" />
           <span
             className="text-base font-bold"
             style={{ color: 'var(--text-primary)', fontFamily: 'Outfit, sans-serif' }}

@@ -304,23 +304,21 @@ export default function AuthButtons({
   return (
     <>
       {showNavigation && (
-        <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 sm:px-8 py-4 bg-white/80 dark:bg-gray-950/80 backdrop-blur-md border-b border-gray-100 dark:border-gray-800/60">
+        <nav className="fixed top-0 left-0 right-0 z-50 border-b border-gray-200 bg-white px-6 py-4 sm:px-8 dark:border-gray-800 dark:bg-gray-950">
+          <div className="mx-auto flex max-w-5xl items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
-              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
+            <img src="/favicon.svg" alt="" aria-hidden="true" className="h-7 w-7" />
             <span className="text-lg font-bold text-gray-900 dark:text-white" style={{ fontFamily: 'Outfit, sans-serif' }}>
               DayChart
             </span>
           </div>
           <button
-            className="bg-blue-600 text-white border-none px-5 py-2 rounded-lg text-sm font-semibold cursor-pointer transition-all hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-500/25 hover:-translate-y-0.5 active:translate-y-0"
+            className="border-none bg-transparent px-2 py-1 text-sm font-medium text-gray-700 shadow-none transition-colors hover:bg-transparent hover:text-blue-600 dark:text-gray-300 dark:hover:text-blue-400"
             onClick={() => setShowModal(true)}
           >
             Sign In
           </button>
+          </div>
         </nav>
       )}
 

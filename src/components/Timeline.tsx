@@ -15,13 +15,20 @@ interface TimelineProps {
   timeBlocks: TimeBlock[];
   onBlockCreated: (startTime: string, endTime: string) => void;
   onBlockClick: (block: TimeBlock) => void;
+  readOnly?: boolean;
+  preview?: boolean;
+  previewFocusTime?: string;
 }
 
 export default function Timeline({
   timeBlocks,
   onBlockCreated,
   onBlockClick,
+  readOnly = false,
+  preview = false,
+  previewFocusTime,
 }: TimelineProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<number | null>(null);
@@ -48,10 +55,16 @@ export default function Timeline({
   }, []);
 
   // Use viewport height minus top bar and padding — same approach on mobile and desktop
-  const timelineHeight = viewportHeight
+  const timelineHeight = preview ? 960 : viewportHeight
     ? Math.max(1200, (viewportHeight - (isMobile ? 80 : 320)) * 2)
     : 1600;
   const totalDayMinutes = 24 * 60;
+
+  useEffect(() => {
+    if (!preview || !previewFocusTime || !scrollRef.current) return;
+    const top = timeStringToMinutes(previewFocusTime) / totalDayMinutes * timelineHeight;
+    scrollRef.current.scrollTo({ top: Math.max(0, top - 80), behavior: 'smooth' });
+  }, [preview, previewFocusTime, timelineHeight, totalDayMinutes]);
 
   const getTimelineSegments = (startMinutes: number, durationMinutes: number) => {
     if (durationMinutes <= 0) return [];
@@ -85,6 +98,7 @@ export default function Timeline({
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    if (readOnly) return;
     const minutes = pixelToMinutes(e.clientY);
     setDragStart(minutes);
     setDragEnd(minutes);
@@ -94,6 +108,7 @@ export default function Timeline({
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (readOnly) return;
     // Don't prevent default initially - allow scrolling until threshold is met
     const touch = e.touches[0];
     const minutes = pixelToMinutes(touch.clientY);
@@ -228,14 +243,14 @@ export default function Timeline({
         return (
           <div
             key={`${block.id}-${index}`}
-            className="absolute left-12 sm:left-14 right-2 sm:right-4 rounded-lg cursor-pointer transition-all hover:shadow-lg active:scale-95 sm:hover:scale-[1.02] group touch-manipulation overflow-hidden"
+            className={`absolute left-12 sm:left-14 right-2 sm:right-4 rounded-lg group overflow-hidden ${readOnly ? 'cursor-default' : 'cursor-pointer transition-all hover:shadow-lg active:scale-95 sm:hover:scale-[1.02] touch-manipulation'}`}
             style={{
               top: `${top}%`,
               height: `${height}%`,
               backgroundColor: block.color,
               minHeight: '20px',
             }}
-            onClick={() => onBlockClick(block)}
+            onClick={readOnly ? undefined : () => onBlockClick(block)}
             title={`${block.label} (${formatTo12Hour(block.startTime)} - ${formatTo12Hour(block.endTime)})`}
           >
             {isVeryShort ? (
@@ -320,22 +335,22 @@ export default function Timeline({
   };
 
   return (
-    <div className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-950">
-      <div className="mx-auto max-w-4xl px-2 sm:px-4 lg:px-6 py-1 sm:py-4 lg:py-8 pb-2 sm:pb-8 lg:pb-8">
-        <div className="mb-2 sm:mb-4 lg:mb-6 hidden lg:block">
+    <div ref={scrollRef} className={`flex-1 overflow-auto ${preview ? 'bg-white dark:bg-gray-950' : 'bg-gray-50 dark:bg-gray-950'}`}>
+      <div className={preview ? 'mx-auto max-w-md px-3 py-2' : 'mx-auto max-w-4xl px-2 sm:px-4 lg:px-6 py-1 sm:py-4 lg:py-8 pb-2 sm:pb-8 lg:pb-8'}>
+        {!preview && <div className="mb-2 sm:mb-4 lg:mb-6 hidden lg:block">
           <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
             Timeline View
           </h3>
           <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1 sm:mt-2">
             Drag on the timeline to create time blocks (5-minute intervals)
           </p>
-        </div>
+        </div>}
 
         {/* Timeline Container */}
         <div className="relative pl-12 sm:pl-14 lg:pl-16">
           <div
             ref={timelineRef}
-            className="relative bg-white dark:bg-gray-900 border-2 border-gray-300 dark:border-gray-700 rounded-lg cursor-crosshair shadow-sm"
+            className={`relative bg-white dark:bg-gray-900 border-2 border-gray-300 dark:border-gray-700 rounded-lg shadow-sm ${readOnly ? '' : 'cursor-crosshair'}`}
             style={{ height: `${timelineHeight}px` }}
             onMouseDown={handleMouseDown}
             onTouchStart={handleTouchStart}

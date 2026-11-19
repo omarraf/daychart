@@ -19,6 +19,9 @@ interface CircularChartProps {
   onBlockChanged: (block: TimeBlock) => void;
   activeBlock?: TimeBlock | null;
   sidebarOpen?: boolean;
+  readOnly?: boolean;
+  previewSize?: number;
+  previewCursorTime?: string;
 }
 
 export default function CircularChart({
@@ -28,6 +31,9 @@ export default function CircularChart({
   onBlockChanged,
   activeBlock,
   sidebarOpen = false,
+  readOnly = false,
+  previewSize,
+  previewCursorTime,
 }: CircularChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -72,7 +78,7 @@ export default function CircularChart({
   }, []);
 
   const defaultSize = 720;
-  const isMobile = viewport.width < 1024;
+  const isMobile = previewSize !== undefined || viewport.width < 1024;
 
   const baseLabelMargin = isMobile ? 24 : 35;
   const estimatedLabelMargin = baseLabelMargin;
@@ -92,7 +98,7 @@ export default function CircularChart({
   const minSize = isMobile ? 280 : 380;
   const maxSize = isMobile ? 900 : 1400;
   const boundedSize = Math.min(Math.max(Math.min(heightBound, widthBound), minSize), maxSize);
-  const chartSize = Number.isFinite(boundedSize) ? boundedSize : defaultSize;
+  const chartSize = previewSize ?? (Number.isFinite(boundedSize) ? boundedSize : defaultSize);
 
   const labelMargin = Math.max(baseLabelMargin, chartSize * 0.085);
   const canvasSize = chartSize + labelMargin * 2;
@@ -157,6 +163,7 @@ export default function CircularChart({
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    if (readOnly) return;
     if (e.button !== 0 || blockDragRef.current) return;
     if (!isPointInDraggableArea(e)) return;
 
@@ -170,6 +177,7 @@ export default function CircularChart({
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (readOnly) return;
     if (!isPointInDraggableArea(e)) return;
     e.preventDefault();
 
@@ -266,6 +274,7 @@ export default function CircularChart({
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
   const startBlockDrag = (event: React.PointerEvent<SVGElement>, block: TimeBlock, mode: 'move' | 'start' | 'end') => {
+    if (readOnly) return;
     if (!event.isPrimary || event.button !== 0 || blockDragRef.current) return;
     event.stopPropagation();
     event.preventDefault();
@@ -516,12 +525,13 @@ export default function CircularChart({
             fill={block.color}
             stroke={blockPreview?.id === block.id && !previewValidation?.valid ? '#ef4444' : 'var(--chart-segment)'}
             strokeWidth="2"
-            className="cursor-grab active:cursor-grabbing transition-opacity"
+            className={readOnly ? 'transition-opacity' : 'cursor-grab active:cursor-grabbing transition-opacity'}
             opacity={isHovered ? 0.85 : 1}
-            role="button"
-            tabIndex={0}
-            aria-label={`Edit ${block.label}, ${formatTo12Hour(block.startTime)} to ${formatTo12Hour(block.endTime)}`}
+            role={readOnly ? undefined : 'button'}
+            tabIndex={readOnly ? undefined : 0}
+            aria-label={`${readOnly ? '' : 'Edit '}${block.label}, ${formatTo12Hour(block.startTime)} to ${formatTo12Hour(block.endTime)}`}
             onKeyDown={(event) => {
+              if (readOnly) return;
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
                 onBlockClick(originalBlock);
@@ -548,7 +558,7 @@ export default function CircularChart({
               {displayLabel}
             </text>
           )}
-          {(['start', 'end'] as const).map((edge) => {
+          {!readOnly && (['start', 'end'] as const).map((edge) => {
             const edgeAngle = edge === 'start' ? startAngleRad : endAngleRad;
             const handleRadius = edge === 'start'
               ? innerRadius + (radius - innerRadius) * 0.25
@@ -767,13 +777,13 @@ export default function CircularChart({
         width={canvasSize}
         height={canvasSize}
         viewBox={`0 0 ${canvasSize} ${canvasSize}`}
-        className="cursor-crosshair block"
+        className={readOnly ? 'block' : 'cursor-crosshair block'}
         style={{
           maxWidth: '100%',
           height: 'auto',
           maxHeight: '100vh',
           margin: '0 auto',
-          touchAction: 'none',
+          touchAction: readOnly ? 'auto' : 'none',
           userSelect: 'none',
           WebkitUserSelect: 'none',
         }}
@@ -808,6 +818,21 @@ export default function CircularChart({
         {renderHourDividers()}
         {renderHourTicks()}
         {renderTimeBlocks()}
+        {previewCursorTime && (() => {
+          const angle = (timeStringToMinutes(previewCursorTime) / (24 * 60)) * 2 * Math.PI - Math.PI / 2;
+          const cursorRadius = (radius + innerRadius) / 2;
+          return (
+            <circle
+              cx={center + cursorRadius * Math.cos(angle)}
+              cy={center + cursorRadius * Math.sin(angle)}
+              r="6"
+              fill="#fff"
+              stroke="#64748b"
+              strokeWidth="2"
+              pointerEvents="none"
+            />
+          );
+        })()}
         {renderDragPreview()}
         {renderHourLabels()}
 
@@ -842,7 +867,7 @@ export default function CircularChart({
 
         {renderCenterDisplay()}
       </svg>
-      {timeBlocks.length > 0 && (
+      {!readOnly && timeBlocks.length > 0 && (
         <p className="absolute bottom-2 inset-x-2 text-center text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 pointer-events-none">
           Drag blocks to move · Drag dots to resize<br />
           Click or tap a block to edit its times

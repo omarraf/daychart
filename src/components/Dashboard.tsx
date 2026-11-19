@@ -46,9 +46,56 @@ export default function Dashboard() {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
   const [viewMode, setViewMode] = useState<'linear' | 'circular'>('circular');
   const [showBlockList, setShowBlockList] = useState(true);
+  const [blockListWidth, setBlockListWidth] = useState(280);
+  const [viewportWidth, setViewportWidth] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 1024);
+  const [isResizingBlockList, setIsResizingBlockList] = useState(false);
+  const resizingBlockListRef = useRef(false);
   const [showDrawer, setShowDrawer] = useState(false);
   const [activeBlock, setActiveBlock] = useState<TimeBlock | null>(null);
   const [showSignInPrompt, setShowSignInPrompt] = useState(false);
+
+  useEffect(() => {
+    const updateWidth = () => setViewportWidth(window.innerWidth);
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
+
+  const maxBlockListWidth = Math.max(280, Math.min(520, Math.floor(viewportWidth * 0.42), viewportWidth - 480));
+  const visibleBlockListWidth = viewportWidth < 640 ? 280 : Math.min(blockListWidth, maxBlockListWidth);
+  const chartLeft = showBlockList && viewportWidth >= 640 ? visibleBlockListWidth : 0;
+  const clampBlockListWidth = (width: number) => Math.max(280, Math.min(maxBlockListWidth, width));
+
+  const startBlockListResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (viewportWidth < 640 || !showBlockList) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizingBlockListRef.current = true;
+    setIsResizingBlockList(true);
+    setBlockListWidth(visibleBlockListWidth);
+  };
+
+  const moveBlockListResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (resizingBlockListRef.current) setBlockListWidth(clampBlockListWidth(event.clientX));
+  };
+
+  const stopBlockListResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    resizingBlockListRef.current = false;
+    setIsResizingBlockList(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const resizeBlockListWithKeyboard = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    let nextWidth: number;
+    if (event.key === 'ArrowLeft') nextWidth = visibleBlockListWidth - 20;
+    else if (event.key === 'ArrowRight') nextWidth = visibleBlockListWidth + 20;
+    else if (event.key === 'Home') nextWidth = 280;
+    else if (event.key === 'End') nextWidth = maxBlockListWidth;
+    else return;
+    event.preventDefault();
+    setBlockListWidth(clampBlockListWidth(nextWidth));
+  };
 
   // Modal state
   const [showLabelModal, setShowLabelModal] = useState(false);
@@ -414,7 +461,7 @@ export default function Dashboard() {
       ═══════════════════════════════════════════════════ */}
 
       {currentRoute === 'dashboard' && viewMode === 'linear' && (
-        <div className={`absolute inset-0 flex flex-col overflow-hidden transition-[left] duration-200 ${showBlockList ? 'sm:left-[280px]' : ''}`} style={{ paddingTop: 56 }}>
+        <div className={`absolute inset-0 flex flex-col overflow-hidden ${isResizingBlockList ? '' : 'transition-[left] duration-200'}`} style={{ paddingTop: 56, left: chartLeft }}>
           <Timeline
             timeBlocks={timeBlocks}
             onBlockCreated={handleBlockCreated}
@@ -424,7 +471,7 @@ export default function Dashboard() {
       )}
 
       {currentRoute === 'dashboard' && viewMode === 'circular' && (
-        <div ref={chartContainerRef} className={`absolute inset-0 flex items-center justify-center transition-[left] duration-200 ${showBlockList ? 'sm:left-[280px]' : ''}`}>
+        <div ref={chartContainerRef} className={`absolute inset-0 flex items-center justify-center ${isResizingBlockList ? '' : 'transition-[left] duration-200'}`} style={{ left: chartLeft }}>
           <CircularChart
             timeBlocks={timeBlocks}
             onBlockChanged={handleBlockChanged}
@@ -432,6 +479,7 @@ export default function Dashboard() {
             onBlockClick={handleBlockClick}
             activeBlock={activeBlock}
             sidebarOpen={showBlockList}
+            sidebarWidth={visibleBlockListWidth}
           />
         </div>
       )}
@@ -652,10 +700,10 @@ export default function Dashboard() {
         <button
           type="button"
           onClick={() => setShowBlockList((open) => !open)}
-          className="fixed z-40 flex items-center justify-center rounded-r-lg rounded-l-none shadow-sm transition-[left] duration-200"
+          className={`fixed z-40 flex items-center justify-center rounded-r-lg rounded-l-none shadow-sm ${isResizingBlockList ? '' : 'transition-[left] duration-200'}`}
           style={{
             top: 72,
-            left: showBlockList ? 280 : 0,
+            left: showBlockList ? visibleBlockListWidth : 0,
             width: 32,
             height: 48,
             padding: 0,
@@ -682,7 +730,7 @@ export default function Dashboard() {
         aria-hidden={currentRoute !== 'dashboard' || !showBlockList}
         inert={currentRoute !== 'dashboard' || !showBlockList}
         style={{
-          width: 280,
+          width: visibleBlockListWidth,
           background: 'var(--surface)',
           borderRight: '1px solid var(--border)',
           transform: currentRoute === 'dashboard' && showBlockList ? 'translateX(0)' : 'translateX(-100%)',
@@ -690,6 +738,25 @@ export default function Dashboard() {
           visibility: currentRoute === 'dashboard' ? 'visible' : 'hidden',
         }}
       >
+        <div
+          role="separator"
+          aria-label="Resize time block list"
+          aria-orientation="vertical"
+          aria-valuemin={280}
+          aria-valuemax={maxBlockListWidth}
+          aria-valuenow={visibleBlockListWidth}
+          tabIndex={currentRoute === 'dashboard' && showBlockList && maxBlockListWidth > 280 ? 0 : -1}
+          onPointerDown={startBlockListResize}
+          onPointerMove={moveBlockListResize}
+          onPointerUp={stopBlockListResize}
+          onPointerCancel={stopBlockListResize}
+          onLostPointerCapture={stopBlockListResize}
+          onKeyDown={resizeBlockListWithKeyboard}
+          className={`group absolute right-0 top-0 z-10 hidden h-full w-3 translate-x-1/2 cursor-col-resize touch-none ${maxBlockListWidth > 280 ? 'sm:block' : ''}`}
+          title="Drag to resize time block list"
+        >
+          <div className="pointer-events-none absolute left-1/2 top-1/2 h-10 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gray-300 transition-colors group-hover:bg-blue-500 dark:bg-gray-600" />
+        </div>
         {/* Panel header */}
         <div
           className="flex items-center justify-between px-4 pb-3 pt-14 sm:pt-3"

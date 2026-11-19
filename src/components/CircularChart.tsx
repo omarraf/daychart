@@ -19,6 +19,7 @@ interface CircularChartProps {
   onBlockChanged: (block: TimeBlock) => void;
   activeBlock?: TimeBlock | null;
   sidebarOpen?: boolean;
+  sidebarWidth?: number;
   readOnly?: boolean;
   previewSize?: number;
   previewCursorTime?: string;
@@ -31,6 +32,7 @@ export default function CircularChart({
   onBlockChanged,
   activeBlock,
   sidebarOpen = false,
+  sidebarWidth = 280,
   readOnly = false,
   previewSize,
   previewCursorTime,
@@ -90,9 +92,9 @@ export default function CircularChart({
     : defaultSize;
 
   const sidePadding = isMobile ? 8 : 24;
-  const availableWidth = viewport.width - (sidebarOpen && viewport.width >= 640 ? 280 : 0);
+  const availableWidth = viewport.width - (sidebarOpen && viewport.width >= 640 ? sidebarWidth : 0);
   const widthBound = viewport.width
-    ? availableWidth - sidePadding - estimatedLabelMargin * 2
+    ? (availableWidth - sidePadding) / 1.17
     : defaultSize;
 
   const minSize = isMobile ? 280 : 380;

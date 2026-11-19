@@ -45,7 +45,7 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
   const [viewMode, setViewMode] = useState<'linear' | 'circular'>('circular');
-  const [showBlockList, setShowBlockList] = useState(false);
+  const [showBlockList, setShowBlockList] = useState(true);
   const [showDrawer, setShowDrawer] = useState(false);
   const [activeBlock, setActiveBlock] = useState<TimeBlock | null>(null);
   const [showSignInPrompt, setShowSignInPrompt] = useState(false);
@@ -524,7 +524,7 @@ export default function Dashboard() {
       ═══════════════════════════════════════════════════ */}
 
       {currentRoute === 'dashboard' && viewMode === 'linear' && (
-        <div className="absolute inset-0 flex flex-col overflow-hidden" style={{ paddingTop: 56 }}>
+        <div className={`absolute inset-0 flex flex-col overflow-hidden transition-[left] duration-200 ${showBlockList ? 'sm:left-[280px]' : ''}`} style={{ paddingTop: 56 }}>
           <Timeline
             timeBlocks={timeBlocks}
             onBlockCreated={handleBlockCreated}
@@ -534,13 +534,14 @@ export default function Dashboard() {
       )}
 
       {currentRoute === 'dashboard' && viewMode === 'circular' && (
-        <div ref={chartContainerRef} className="absolute inset-0 flex items-center justify-center">
+        <div ref={chartContainerRef} className={`absolute inset-0 flex items-center justify-center transition-[left] duration-200 ${showBlockList ? 'sm:left-[280px]' : ''}`}>
           <CircularChart
             timeBlocks={timeBlocks}
             onBlockChanged={handleBlockChanged}
             onBlockCreated={handleBlockCreated}
             onBlockClick={handleBlockClick}
             activeBlock={activeBlock}
+            sidebarOpen={showBlockList}
           />
         </div>
       )}
@@ -604,12 +605,12 @@ export default function Dashboard() {
           FLOATING UI — z-40
       ═══════════════════════════════════════════════════ */}
 
-      {/* Hamburger — top-left 12px */}
+      {/* Hamburger — top-right 12px */}
       <button
         onClick={() => setShowDrawer(true)}
         className="fixed z-40 flex items-center justify-center rounded-lg transition-colors border-none p-0 shadow-sm hover:opacity-90"
         style={{
-          top: 12, left: 12,
+          top: 12, right: 12,
           width: 32, height: 32,
           background: 'var(--surface)',
           border: '1px solid var(--border)',
@@ -663,27 +664,6 @@ export default function Dashboard() {
             }}
           >
             Circular
-          </button>
-
-          {/* Divider — hidden on small screens where List is hidden */}
-          <div className="hidden sm:block" style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 4px', flexShrink: 0 }} />
-
-          {/* List button — hidden on small screens */}
-          <button
-            onClick={() => setShowBlockList((v) => !v)}
-            className="border-none shadow-none rounded-full transition-colors items-center justify-center px-2.5 hidden sm:flex"
-            style={{
-              height: 24,
-              background: showBlockList ? 'rgba(37,99,235,0.1)' : 'transparent',
-              color: showBlockList ? '#2563eb' : 'var(--text-muted)',
-              cursor: 'pointer',
-              fontSize: 12,
-              fontWeight: 500,
-              whiteSpace: 'nowrap',
-            }}
-            title={showBlockList ? 'Hide block list' : 'Show block list'}
-          >
-            List
           </button>
 
           {/* Export button — circular mode only, when blocks exist */}
@@ -767,31 +747,62 @@ export default function Dashboard() {
       )}
 
       {/* ═══════════════════════════════════════════════════
-          BLOCK LIST RIGHT PANEL — z-[39] (below floating UI)
+          BLOCK LIST LEFT PANEL — z-[39] (below floating UI)
       ═══════════════════════════════════════════════════ */}
 
-      {/* Click-away overlay (below pill at z-40, above canvas) */}
-      {showBlockList && (
+      {/* On small screens, dismiss the panel by tapping the canvas. */}
+      {currentRoute === 'dashboard' && showBlockList && (
         <div
-          className="fixed inset-0 z-[38]"
+          className="fixed inset-0 z-[38] sm:hidden"
           onClick={() => setShowBlockList(false)}
         />
       )}
 
+      {currentRoute === 'dashboard' && (
+        <button
+          type="button"
+          onClick={() => setShowBlockList((open) => !open)}
+          className="fixed z-40 flex items-center justify-center rounded-r-lg rounded-l-none shadow-sm transition-[left] duration-200"
+          style={{
+            top: 72,
+            left: showBlockList ? 280 : 0,
+            width: 32,
+            height: 48,
+            padding: 0,
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderLeft: 0,
+            color: 'var(--text-primary)',
+          }}
+          aria-label={showBlockList ? 'Collapse time blocks' : 'Expand time blocks'}
+          aria-expanded={showBlockList}
+          aria-controls="time-block-list"
+          title={showBlockList ? 'Collapse time blocks' : 'Expand time blocks'}
+        >
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={showBlockList ? 'M15 18l-6-6 6-6' : 'M9 18l6-6-6-6'} />
+          </svg>
+        </button>
+      )}
+
       {/* Panel — always rendered for transition */}
       <div
-        className="fixed top-0 right-0 h-full z-[39] flex flex-col transition-transform duration-200 ease-out"
+        id="time-block-list"
+        className="fixed top-0 left-0 h-full z-[39] flex flex-col transition-transform duration-200 ease-out"
+        aria-hidden={currentRoute !== 'dashboard' || !showBlockList}
+        inert={currentRoute !== 'dashboard' || !showBlockList}
         style={{
           width: 280,
           background: 'var(--surface)',
-          borderLeft: '1px solid var(--border)',
-          transform: showBlockList ? 'translateX(0)' : 'translateX(100%)',
-          boxShadow: showBlockList ? '-8px 0 32px rgba(0,0,0,0.08)' : 'none',
+          borderRight: '1px solid var(--border)',
+          transform: currentRoute === 'dashboard' && showBlockList ? 'translateX(0)' : 'translateX(-100%)',
+          boxShadow: currentRoute === 'dashboard' && showBlockList ? '8px 0 32px rgba(0,0,0,0.08)' : 'none',
+          visibility: currentRoute === 'dashboard' ? 'visible' : 'hidden',
         }}
       >
         {/* Panel header */}
         <div
-          className="flex items-center justify-between px-4 py-3"
+          className="flex items-center justify-between px-4 pb-3 pt-14 sm:pt-3"
           style={{ borderBottom: '1px solid var(--border)' }}
         >
           <div>
@@ -805,28 +816,14 @@ export default function Dashboard() {
               )}
             </div>
           </div>
-          <button
-            onClick={() => setShowBlockList(false)}
-            className="border-none shadow-none rounded-md flex items-center justify-center transition-colors"
-            style={{
-              width: 24, height: 24,
-              background: 'transparent',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              padding: 0,
-            }}
-          >
-            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
         </div>
 
         {/* Panel list */}
         <div className="flex-1 overflow-y-auto">
           {sortedBlocks.length === 0 ? (
-            <div className="flex items-center justify-center h-32 text-sm" style={{ color: 'var(--text-muted)' }}>
-              Drag on the dial to add blocks
+            <div className="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center" style={{ color: 'var(--text-muted)' }}>
+              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>No time blocks yet</span>
+              <span className="text-sm">Blocks you make will be listed here.</span>
             </div>
           ) : (
             sortedBlocks.map((block) => {
@@ -835,7 +832,7 @@ export default function Dashboard() {
               return (
                 <button
                   key={block.id}
-                  onClick={() => { handleBlockClick(block); setShowBlockList(false); }}
+                  onClick={() => { handleBlockClick(block); }}
                   onMouseEnter={() => setActiveBlock(block)}
                   onMouseLeave={() => setActiveBlock(null)}
                   className="w-full flex items-center gap-3 border-none shadow-none transition-colors"
@@ -885,13 +882,13 @@ export default function Dashboard() {
       )}
 
       <div
-        className="fixed top-0 left-0 h-full z-[50] flex flex-col transition-transform duration-200 ease-out"
+        className="fixed top-0 right-0 h-full z-[50] flex flex-col transition-transform duration-200 ease-out"
         style={{
           width: 240,
           background: 'var(--surface)',
-          borderRight: '1px solid var(--border)',
-          transform: showDrawer ? 'translateX(0)' : 'translateX(calc(-100% - 2px))',
-          boxShadow: showDrawer ? '8px 0 32px rgba(0,0,0,0.1)' : 'none',
+          borderLeft: '1px solid var(--border)',
+          transform: showDrawer ? 'translateX(0)' : 'translateX(calc(100% + 2px))',
+          boxShadow: showDrawer ? '-8px 0 32px rgba(0,0,0,0.1)' : 'none',
         }}
       >
         {/* Drawer header */}

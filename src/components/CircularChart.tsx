@@ -18,6 +18,7 @@ interface CircularChartProps {
   onBlockClick: (block: TimeBlock) => void;
   onBlockChanged: (block: TimeBlock) => void;
   activeBlock?: TimeBlock | null;
+  sidebarOpen?: boolean;
 }
 
 export default function CircularChart({
@@ -26,6 +27,7 @@ export default function CircularChart({
   onBlockClick,
   onBlockChanged,
   activeBlock,
+  sidebarOpen = false,
 }: CircularChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -82,8 +84,9 @@ export default function CircularChart({
     : defaultSize;
 
   const sidePadding = isMobile ? 8 : 24;
+  const availableWidth = viewport.width - (sidebarOpen && viewport.width >= 640 ? 280 : 0);
   const widthBound = viewport.width
-    ? viewport.width - sidePadding - estimatedLabelMargin * 2
+    ? availableWidth - sidePadding - estimatedLabelMargin * 2
     : defaultSize;
 
   const minSize = isMobile ? 280 : 380;

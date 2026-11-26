@@ -82,7 +82,7 @@ export default function FeedbackPage({ user }: FeedbackPageProps) {
             <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
               {user?.email && followUp
                 ? `I read every message and may follow up at ${user.email}.`
-                : 'I read every message — it really helps shape DayChart.'}
+                : 'I read every message, and it really helps shape DayChart.'}
             </p>
             <button
               type="button"

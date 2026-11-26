@@ -243,7 +243,7 @@ export default function Sidebar({
           <button
             onClick={handleSignOut}
             className="w-10 h-10 flex items-center justify-center rounded-lg text-white text-sm font-semibold bg-blue-600 hover:bg-blue-700 transition-colors border-none shadow-none p-0"
-            title={`${userEmail} — Sign Out`}
+            title={`${userEmail} · Sign Out`}
           >
             {userEmail[0].toUpperCase()}
           </button>

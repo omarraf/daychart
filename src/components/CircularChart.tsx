@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useId } from 'react';
 import type { TimeBlock } from '../types/schedule';
 import {
   timeStringToMinutes,
@@ -11,6 +11,69 @@ import {
   validateTimeBlock,
   adjustTimeBlock,
 } from '../utils/timeUtils';
+
+type LabelOrientation = 'curved' | 'radial';
+
+interface BlockLabelLayout {
+  orientation: LabelOrientation;
+  fontSize: number;
+  lines: string[];
+}
+
+let measureContext: CanvasRenderingContext2D | null | undefined;
+
+// Measure rendered text width so labels are fitted to real glyph widths, not a per-char guess
+function measureTextWidth(text: string, fontSize: number, fontWeight: number, fontFamily: string): number {
+  if (measureContext === undefined) {
+    measureContext = typeof document !== 'undefined'
+      ? document.createElement('canvas').getContext('2d')
+      : null;
+  }
+  if (!measureContext) return text.length * fontSize * 0.6;
+  measureContext.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+  return measureContext.measureText(text).width;
+}
+
+// Longest prefix (with ellipsis) that fits, plus how many original characters it kept
+function truncateToWidth(text: string, maxWidth: number, measure: (s: string) => number): { text: string; kept: number } | null {
+  if (measure(text) <= maxWidth) return { text, kept: text.length };
+  for (let kept = text.length - 1; kept >= 1; kept--) {
+    const candidate = `${text.slice(0, kept).trimEnd()}…`;
+    if (measure(candidate) <= maxWidth) return { text: candidate, kept };
+  }
+  return null;
+}
+
+// Split at the word break that best balances two lines, if both lines fit
+function wrapToTwoLines(text: string, maxWidth: number, measure: (s: string) => number): string[] | null {
+  const words = text.split(' ');
+  let best: string[] | null = null;
+  let bestWidest = Infinity;
+  for (let i = 1; i < words.length; i++) {
+    const lines = [words.slice(0, i).join(' '), words.slice(i).join(' ')];
+    const widest = Math.max(...lines.map(measure));
+    if (widest <= maxWidth && widest < bestWidest) {
+      best = lines;
+      bestWidest = widest;
+    }
+  }
+  return best;
+}
+
+// Arc used as a textPath. Bottom-half labels run counter-clockwise so they read upright.
+function describeLabelArc(cx: number, cy: number, r: number, startAngle: number, endAngle: number, reverse: boolean): string {
+  const span = Math.min(endAngle - startAngle, 359.9);
+  const toPoint = (angle: number) => {
+    const rad = ((angle - 90) * Math.PI) / 180;
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+  };
+  const from = toPoint(reverse ? startAngle + span : startAngle);
+  const to = toPoint(reverse ? startAngle : startAngle + span);
+  const largeArc = span > 180 ? 1 : 0;
+  return `M ${from.x} ${from.y} A ${r} ${r} 0 ${largeArc} ${reverse ? 0 : 1} ${to.x} ${to.y}`;
+}
+
+const MIN_VISIBLE_LABEL_CHARS = 4;
 
 interface CircularChartProps {
   timeBlocks: TimeBlock[];
@@ -38,6 +101,18 @@ export default function CircularChart({
   previewCursorTime,
 }: CircularChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const labelIdPrefix = `block-label-${useId().replace(/:/g, '')}`;
+  // Labels are fitted using measured text widths, so re-fit once web fonts finish loading
+  const [, setFontsLoaded] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    document.fonts?.ready.then(() => {
+      if (!cancelled) setFontsLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<number | null>(null);
   const [dragProgress, setDragProgress] = useState(0);
@@ -110,6 +185,93 @@ export default function CircularChart({
   const labelRadiusOffset = chartSize * 0.1;
   const tickInnerOffset = chartSize * 0.01;
   const tickOuterOffset = chartSize * 0.03;
+
+  // Block labels scale with the chart instead of staying fixed at 10–12px
+  const ringWidth = radius - innerRadius;
+  const labelRadius = (radius + innerRadius) / 2;
+  const labelPadding = Math.max(6, ringWidth * 0.08);
+  const labelFontSize = Math.min(16, Math.max(11, chartSize * 0.02));
+  const minLabelFontSize = Math.max(10, labelFontSize * 0.85);
+  const labelFontFamily = typeof document !== 'undefined'
+    ? getComputedStyle(document.body).fontFamily
+    : 'sans-serif';
+
+  /**
+   * Pick the label orientation that fits the block best:
+   * - curved along the arc for long blocks
+   * - radial (pointing outward) for short blocks, where the ring's thickness gives more room
+   * Full labels win over truncated ones; ties go to whichever reads closer to horizontal.
+   * Labels that can't show at least a few characters are hidden (hover/list still show them).
+   */
+  const getBlockLabelLayout = (block: TimeBlock, startAngle: number, endAngle: number): BlockLabelLayout | null => {
+    const spanRad = ((endAngle - startAngle) * Math.PI) / 180;
+    const midRad = (((startAngle + endAngle) / 2) * Math.PI) / 180;
+
+    const options: { orientation: LabelOrientation; length: number; thickness: number; horizontality: number }[] = [
+      {
+        orientation: 'curved',
+        length: spanRad * labelRadius - labelPadding * 2,
+        thickness: ringWidth - labelPadding * 2,
+        horizontality: Math.abs(Math.cos(midRad)),
+      },
+      {
+        orientation: 'radial',
+        length: ringWidth - labelPadding * 2,
+        // Narrowest point of a radial label is at the inner edge of the ring
+        thickness: spanRad * (innerRadius + labelPadding) - 4,
+        horizontality: Math.abs(Math.sin(midRad)),
+      },
+    ];
+
+    let best: BlockLabelLayout | null = null;
+    let bestScore = -Infinity;
+
+    for (const option of options) {
+      for (const fontSize of [labelFontSize, minLabelFontSize]) {
+        if (option.thickness < fontSize * 1.15) continue;
+
+        const measure = (s: string) => measureTextWidth(s, fontSize, 600, labelFontFamily);
+        let lines: string[] | null = null;
+        let kept = 0;
+
+        const fitted = truncateToWidth(block.label, option.length, measure);
+        if (fitted && fitted.kept === block.label.length) {
+          lines = [fitted.text];
+          kept = fitted.kept;
+        } else {
+          // Wrap long names onto two lines when the ring is thick enough.
+          // Curved lines sit off the center radius, so budget for the shorter inner line.
+          const wrapLength = option.orientation === 'curved'
+            ? option.length * ((labelRadius - fontSize) / labelRadius)
+            : option.length;
+          const wrapped = option.thickness >= fontSize * 2.4
+            ? wrapToTwoLines(block.label, wrapLength, measure)
+            : null;
+          if (wrapped) {
+            lines = wrapped;
+            kept = block.label.length;
+          } else if (fitted) {
+            lines = [fitted.text];
+            kept = fitted.kept;
+          }
+        }
+
+        if (!lines || kept < Math.min(block.label.length, MIN_VISIBLE_LABEL_CHARS)) continue;
+
+        const isFull = kept === block.label.length;
+        // Full label > bigger font > one line > more characters > closer to horizontal
+        const score = (isFull ? 1e6 : 0) + fontSize * 1e4 + (lines.length === 1 ? 1e3 : 0) + kept * 10 + option.horizontality;
+
+        if (score > bestScore) {
+          best = { orientation: option.orientation, fontSize, lines };
+          bestScore = score;
+        }
+        if (isFull) break; // no need to try a smaller font once the full label fits
+      }
+    }
+
+    return best;
+  };
 
   const angleToMinutes = (angle: number): number => {
     const normalizedAngle = ((angle % 360) + 360) % 360;
@@ -442,6 +604,138 @@ export default function CircularChart({
     return dividers;
   };
 
+  const renderBlockLabel = (
+    blockId: string,
+    layout: BlockLabelLayout,
+    startAngle: number,
+    endAngle: number,
+    textColor: string,
+  ) => {
+    const { orientation, fontSize, lines } = layout;
+
+    // Center the stack of name lines on the label radius
+    const lineHeight = fontSize * 1.15;
+    const placedLines = lines.map((text, i) => ({
+      text,
+      dy: (i - (lines.length - 1) / 2) * lineHeight + fontSize * 0.35,
+    }));
+
+    const midAngle = (startAngle + endAngle) / 2;
+
+    if (orientation === 'curved') {
+      const pathId = `${labelIdPrefix}-${blockId}`;
+      const isBottomHalf = midAngle > 90 && midAngle < 270;
+      return (
+        <g pointerEvents="none">
+          <path id={pathId} d={describeLabelArc(center, center, labelRadius, startAngle, endAngle, isBottomHalf)} fill="none" />
+          {placedLines.map((line, i) => (
+            <text key={i} dy={line.dy} fill={textColor} fontWeight="600" style={{ fontSize: `${fontSize}px` }}>
+              <textPath href={`#${pathId}`} startOffset="50%" textAnchor="middle">{line.text}</textPath>
+            </text>
+          ))}
+        </g>
+      );
+    }
+
+    // Radial: right half reads outward from the center, left half reads inward
+    const midAngleRad = ((midAngle - 90) * Math.PI) / 180;
+    const x = center + labelRadius * Math.cos(midAngleRad);
+    const y = center + labelRadius * Math.sin(midAngleRad);
+    const rotation = midAngle < 180 ? midAngle - 90 : midAngle + 90;
+
+    return (
+      <g pointerEvents="none" transform={`rotate(${rotation}, ${x}, ${y})`}>
+        {placedLines.map((line, i) => (
+          <text key={i} x={x} y={y} dy={line.dy} textAnchor="middle" fill={textColor} fontWeight="600" style={{ fontSize: `${fontSize}px` }}>
+            {line.text}
+          </text>
+        ))}
+      </g>
+    );
+  };
+
+  /**
+   * Blocks too thin for an in-ring label get a callout just inside the ring, in the empty
+   * center: a dot in the block's color at its inner edge, with the name running inward.
+   * Neighbouring callouts are nudged apart; ones that would drift too far are dropped
+   * (hover and the list still show them).
+   */
+  const renderInnerCallouts = () => {
+    const calloutFontSize = Math.max(10, labelFontSize * 0.8);
+    const dotRadius = innerRadius - Math.max(6, ringWidth * 0.06);
+    const textRadius = dotRadius - calloutFontSize * 0.8;
+    // Keep clear of the center readout
+    const maxLength = innerRadius * 0.38;
+    const minSeparation = (calloutFontSize * 1.3) / (textRadius - maxLength / 2);
+    const maxShift = minSeparation * 2.5;
+
+    const candidates = timeBlocks
+      .map((originalBlock) => {
+        const block = blockPreview?.id === originalBlock.id ? blockPreview : originalBlock;
+        const startAngle = minutesToAngle(timeStringToMinutes(block.startTime));
+        const endAngle = startAngle + minutesToAngle(calculateDuration(block.startTime, block.endTime));
+        if (getBlockLabelLayout(block, startAngle, endAngle)) return null;
+        const fitted = truncateToWidth(block.label, maxLength, (s) => measureTextWidth(s, calloutFontSize, 500, labelFontFamily));
+        if (!fitted || fitted.kept < Math.min(block.label.length, MIN_VISIBLE_LABEL_CHARS)) return null;
+        return { originalBlock, block, text: fitted.text, midRad: (((startAngle + endAngle) / 2) * Math.PI) / 180 };
+      })
+      .filter((c) => c !== null)
+      .sort((a, b) => a.midRad - b.midRad);
+
+    let previousRad = -Infinity;
+    const placed = candidates.flatMap((candidate) => {
+      const labelRad = Math.max(candidate.midRad, previousRad + minSeparation);
+      if (labelRad - candidate.midRad > maxShift) return [];
+      previousRad = labelRad;
+      return [{ ...candidate, labelRad }];
+    });
+
+    const centerBusy = !!(blockPreview || activeBlock || hoveredBlock || (isDragging && hasMovedEnough));
+
+    return placed.map(({ originalBlock, block, text, midRad, labelRad }) => {
+      const dotAngle = midRad - Math.PI / 2;
+      const labelAngle = labelRad - Math.PI / 2;
+      const x = center + textRadius * Math.cos(labelAngle);
+      const y = center + textRadius * Math.sin(labelAngle);
+      const labelDeg = (labelRad * 180) / Math.PI;
+      // Same reading rule as radial labels: right half reads outward, left half inward
+      const isRightHalf = labelDeg < 180;
+      const rotation = isRightHalf ? labelDeg - 90 : labelDeg + 90;
+      const isFocused = hoveredBlock?.id === block.id || activeBlock?.id === block.id;
+
+      return (
+        <g
+          key={`callout-${block.id}`}
+          opacity={centerBusy && !isFocused ? 0.25 : 1}
+          className="transition-opacity"
+          style={{ cursor: readOnly ? 'default' : 'pointer' }}
+          onClick={() => !readOnly && onBlockClick(originalBlock)}
+          onMouseEnter={() => setHoveredBlock(block)}
+          onMouseLeave={() => setHoveredBlock(null)}
+        >
+          <circle
+            cx={center + dotRadius * Math.cos(dotAngle)}
+            cy={center + dotRadius * Math.sin(dotAngle)}
+            r={Math.max(3, calloutFontSize * 0.28)}
+            fill={block.color}
+          />
+          <text
+            x={x}
+            y={y}
+            dy={calloutFontSize * 0.35}
+            textAnchor={isRightHalf ? 'end' : 'start'}
+            transform={`rotate(${rotation}, ${x}, ${y})`}
+            fill="var(--chart-label)"
+            fontWeight="500"
+            style={{ fontSize: `${calloutFontSize}px` }}
+          >
+            {text}
+          </text>
+        </g>
+      );
+    });
+  };
+
   const renderTimeBlocks = () => {
     return timeBlocks.map((originalBlock) => {
       const block = blockPreview?.id === originalBlock.id ? blockPreview : originalBlock;
@@ -474,48 +768,7 @@ export default function CircularChart({
         Z
       `;
 
-      const midAngle = (startAngle + endAngle) / 2;
-      const midAngleRad = ((midAngle - 90) * Math.PI) / 180;
-      const labelRadius = (radius + innerRadius) / 2;
-      const labelX = center + labelRadius * Math.cos(midAngleRad);
-      const labelY = center + labelRadius * Math.sin(midAngleRad);
-
-      const arcSpanDeg = endAngle - startAngle;
-      const arcLength = (arcSpanDeg / 360) * 2 * Math.PI * labelRadius;
-      const radialWidth = radius - innerRadius;
-
-      const charWidthLarge = 7;
-      const charWidthSmall = 5.5;
-      const availableWidth = Math.min(arcLength * 0.85, radialWidth * 1.2);
-
-      let fontSize: number;
-      let displayLabel: string;
-
-      if (duration < 20) {
-        fontSize = 0;
-        displayLabel = '';
-      } else if (availableWidth < charWidthSmall * 2) {
-        fontSize = 0;
-        displayLabel = '';
-      } else if (availableWidth < charWidthLarge * block.label.length) {
-        fontSize = 10;
-        const maxChars = Math.floor(availableWidth / charWidthSmall);
-        if (maxChars < 3) {
-          fontSize = 0;
-          displayLabel = '';
-        } else if (maxChars < block.label.length) {
-          displayLabel = block.label.slice(0, maxChars - 1) + '\u2026';
-        } else {
-          displayLabel = block.label;
-        }
-      } else {
-        fontSize = 12;
-        displayLabel = block.label;
-      }
-
-      const rotationAngle = midAngle;
-      const adjustedRotation =
-        rotationAngle > 90 && rotationAngle < 270 ? rotationAngle + 180 : rotationAngle;
+      const labelLayout = getBlockLabelLayout(block, startAngle, endAngle);
 
       const textColor = getTextColor();
       const isHovered = hoveredBlock?.id === block.id || activeBlock?.id === block.id;
@@ -545,21 +798,7 @@ export default function CircularChart({
             onMouseEnter={() => setHoveredBlock(block)}
             onMouseLeave={() => setHoveredBlock(null)}
           />
-          {fontSize > 0 && displayLabel && (
-            <text
-              x={labelX}
-              y={labelY}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              transform={`rotate(${adjustedRotation}, ${labelX}, ${labelY})`}
-              fill={textColor}
-              fontWeight="600"
-              pointerEvents="none"
-              style={{ fontSize: `${fontSize}px` }}
-            >
-              {displayLabel}
-            </text>
-          )}
+          {labelLayout && renderBlockLabel(block.id, labelLayout, startAngle, endAngle, textColor)}
           {!readOnly && (['start', 'end'] as const).map((edge) => {
             const edgeAngle = edge === 'start' ? startAngleRad : endAngleRad;
             const handleRadius = edge === 'start'
@@ -730,7 +969,7 @@ export default function CircularChart({
           </text>
           {blockPreview && !previewValidation?.valid && (
             <text x={center} y={center + 36} textAnchor="middle" fill="#ef4444" fontSize={isMobile ? 9 : 11}>
-              Overlaps another block — move to a free time
+              Overlaps another block. Move it to a free time.
             </text>
           )}
         </g>
@@ -820,6 +1059,7 @@ export default function CircularChart({
         {renderHourDividers()}
         {renderHourTicks()}
         {renderTimeBlocks()}
+        {renderInnerCallouts()}
         {previewCursorTime && (() => {
           const angle = (timeStringToMinutes(previewCursorTime) / (24 * 60)) * 2 * Math.PI - Math.PI / 2;
           const cursorRadius = (radius + innerRadius) / 2;

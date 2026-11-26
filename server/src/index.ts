@@ -4,9 +4,13 @@ import Anthropic from '@anthropic-ai/sdk';
 import * as admin from 'firebase-admin';
 import Stripe from 'stripe';
 import { corsOptions } from './cors';
+import { createFeedbackRouter } from './feedback';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Railway sits behind a proxy — needed so req.ip is the client IP (used for guest rate limits)
+app.set('trust proxy', 1);
 
 // Initialize Firebase Admin with service account for Firestore access
 const serviceAccount = process.env.GOOGLE_SERVICE_ACCOUNT
@@ -124,6 +128,8 @@ app.use(cors(corsOptions));
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }));
 
 app.use(express.json());
+
+app.use(createFeedbackRouter(db));
 
 // Health check
 app.get('/health', (_req, res) => {

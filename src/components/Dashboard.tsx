@@ -535,7 +535,7 @@ export default function Dashboard() {
 
       {currentRoute === 'feedback' && (
         <div className="absolute inset-0 overflow-y-auto" style={{ paddingTop: 60 }}>
-          <FeedbackPage />
+          <FeedbackPage user={user} />
         </div>
       )}
 

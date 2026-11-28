@@ -10,6 +10,8 @@ import ExportPreviewModal from './ExportPreviewModal';
 import SchedulesPage from './SchedulesPage';
 import SettingsPage from './SettingsPage';
 import FeedbackPage from './FeedbackPage';
+import ChangelogPage from './ChangelogPage';
+import { LATEST_CHANGELOG_ID } from '../constants/changelog';
 import AppDialog from './AppDialog';
 import { PanelSection } from './PanelUI';
 import { LEGAL_TITLES, LegalContent, type LegalDoc } from './LegalContent';
@@ -19,8 +21,8 @@ import type { DisplayMessage } from './AIAssistant';
 import LandingPage from './LandingPage';
 import type { NavRoute, TimeBlock } from '../types/schedule';
 
-type PanelRoute = Extract<NavRoute, 'schedules' | 'settings' | 'feedback'>;
-const PANEL_ROUTES: readonly NavRoute[] = ['schedules', 'settings', 'feedback'];
+type PanelRoute = Extract<NavRoute, 'schedules' | 'settings' | 'feedback' | 'changelog'>;
+const PANEL_ROUTES: readonly NavRoute[] = ['schedules', 'settings', 'feedback', 'changelog'];
 const isPanelRoute = (route: NavRoute): route is PanelRoute => PANEL_ROUTES.includes(route);
 import {
   saveSchedule,
@@ -52,6 +54,23 @@ export default function Dashboard() {
   const [openPanel, setOpenPanel] = useState<PanelRoute | null>(null);
   // About / Terms / Privacy open inside the Settings popup rather than a second popup
   const [settingsDoc, setSettingsDoc] = useState<LegalDoc | null>(null);
+  // Dot on the menu until the latest release notes have been opened
+  const [hasUnseenChangelog, setHasUnseenChangelog] = useState(() => {
+    try {
+      return localStorage.getItem('changelogSeen') !== LATEST_CHANGELOG_ID;
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    if (openPanel !== 'changelog' || !hasUnseenChangelog) return;
+    setHasUnseenChangelog(false);
+    try {
+      localStorage.setItem('changelogSeen', LATEST_CHANGELOG_ID);
+    } catch {
+      // Storage unavailable; the dot just comes back next visit
+    }
+  }, [openPanel, hasUnseenChangelog]);
   const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
@@ -478,6 +497,15 @@ export default function Dashboard() {
         </svg>
       ),
     },
+    {
+      route: 'changelog',
+      label: "What's new",
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+        </svg>
+      ),
+    },
   ];
 
   return (
@@ -541,10 +569,18 @@ export default function Dashboard() {
           color: 'var(--text-primary)',
         }}
         title="Menu"
+        aria-label={hasUnseenChangelog ? 'Menu, new updates' : 'Menu'}
       >
         <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
         </svg>
+        {hasUnseenChangelog && (
+          <span
+            className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-blue-600"
+            style={{ boxShadow: '0 0 0 2px var(--surface)' }}
+            aria-hidden="true"
+          />
+        )}
       </button>
 
       {/* Controls pill — centered top 12px, dashboard only */}
@@ -929,6 +965,9 @@ export default function Dashboard() {
                   {item.icon}
                 </span>
                 <span className="text-sm font-medium">{item.label}</span>
+                {item.route === 'changelog' && hasUnseenChangelog && (
+                  <span className="ml-auto w-2 h-2 rounded-full bg-blue-600" aria-label="New updates" />
+                )}
               </button>
             );
           })}
@@ -1159,6 +1198,10 @@ export default function Dashboard() {
 
       <AppDialog isOpen={openPanel === 'feedback'} onClose={() => setOpenPanel(null)} title="Share feedback">
         <FeedbackPage user={user} />
+      </AppDialog>
+
+      <AppDialog isOpen={openPanel === 'changelog'} onClose={() => setOpenPanel(null)} title="What's new">
+        <ChangelogPage />
       </AppDialog>
 
       {/* Authentication modal for dashboard sign-in actions */}

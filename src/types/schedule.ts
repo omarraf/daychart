@@ -40,4 +40,4 @@ export interface TimeRange {
 
 export type TimeBlockInput = Omit<TimeBlock, 'id' | 'order'>;
 export type ViewMode = 'chart' | 'timeline' | 'both';
-export type NavRoute = 'dashboard' | 'schedules' | 'settings' | 'feedback' | 'ai-assistant';
+export type NavRoute = 'dashboard' | 'schedules' | 'settings' | 'feedback' | 'changelog' | 'ai-assistant';

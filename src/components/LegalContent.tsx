@@ -64,6 +64,10 @@ function AboutContent() {
           {' · '}
           <RepoLink>View on GitHub</RepoLink>
         </p>
+        <p className="mt-1">
+          DayChart is free. If it helps you, you can{' '}
+          <a href="https://buymeacoffee.com/omarraf" target="_blank" rel="noopener noreferrer">buy me a coffee</a>.
+        </p>
       </div>
     </div>
   );

@@ -1041,6 +1041,27 @@ export default function Dashboard() {
             <span className="text-sm font-medium">GitHub</span>
           </a>
 
+          {/* Support link */}
+          <a
+            href="https://buymeacoffee.com/omarraf"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center gap-3 transition-colors rounded-none no-underline"
+            style={{
+              padding: '9px 20px',
+              color: 'var(--text-primary)',
+              display: 'flex',
+            }}
+            onClick={() => setShowDrawer(false)}
+          >
+            <span style={{ color: 'var(--text-muted)' }}>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h1a4 4 0 010 8h-1M3 8h14v9a4 4 0 01-4 4H7a4 4 0 01-4-4V8zM6 1v3M10 1v3M14 1v3" />
+              </svg>
+            </span>
+            <span className="text-sm font-medium">Buy me a coffee</span>
+          </a>
+
           {/* Dark mode toggle */}
           <button
             onClick={() => { toggleDarkMode(); setShowDrawer(false); }}

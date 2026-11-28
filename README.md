@@ -55,7 +55,7 @@ We're actively working on new features! Upcoming additions include:
 - 🌐 **PWA Support** - Install as a mobile app, work offline
 - 🔗 **Share Schedules** - Generate public links to share your routines
 
-Have an idea? [Open an issue](https://github.com/omarraf/time-tracker/issues) or contribute!
+Have an idea? [Open an issue](https://github.com/omarraf/daychart/issues) or contribute!
 
 ---
 

@@ -225,8 +225,8 @@ export default function CircularChart({
   const baseLabelMargin = isMobile ? 24 : 35;
   const estimatedLabelMargin = baseLabelMargin;
 
-  const mobileHeightOffset = 80; // floating pill only, no top toolbar or bottom nav
-  const desktopHeightOffset = 80; // floating pill only
+  const mobileHeightOffset = 120; // floating pill + schedule title, no bottom nav
+  const desktopHeightOffset = 120; // floating pill + schedule title
   const heightBound = viewport.height
     ? viewport.height - (isMobile ? mobileHeightOffset : desktopHeightOffset) - estimatedLabelMargin * 2
     : defaultSize;

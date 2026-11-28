@@ -68,9 +68,13 @@
     @apply bg-gray-50 dark:bg-gray-700;
   }
 
-  button:focus,
+  /* Ring only for keyboard focus; mouse clicks shouldn't leave an outline behind */
+  button:focus {
+    @apply outline-none;
+  }
+
   button:focus-visible {
-    @apply outline-none ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-gray-900;
+    @apply ring-2 ring-blue-500/70;
   }
 
   input[type="text"],

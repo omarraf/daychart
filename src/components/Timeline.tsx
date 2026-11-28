@@ -99,6 +99,8 @@ export default function Timeline({
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (readOnly) return;
+    // Stop the browser from starting a text selection that sweeps the hour labels while dragging
+    e.preventDefault();
     const minutes = pixelToMinutes(e.clientY);
     setDragStart(minutes);
     setDragEnd(minutes);
@@ -335,7 +337,7 @@ export default function Timeline({
   };
 
   return (
-    <div ref={scrollRef} className={`flex-1 overflow-auto ${preview ? 'bg-white dark:bg-gray-950' : 'bg-gray-50 dark:bg-gray-950'}`}>
+    <div ref={scrollRef} className={`flex-1 overflow-auto ${readOnly ? '' : 'select-none'} ${preview ? 'bg-white dark:bg-gray-950' : 'bg-gray-50 dark:bg-gray-950'}`}>
       <div className={preview ? 'mx-auto max-w-md px-3 py-2' : 'mx-auto max-w-4xl px-2 sm:px-4 lg:px-6 py-1 sm:py-4 lg:py-8 pb-2 sm:pb-8 lg:pb-8'}>
         {!preview && <div className="mb-2 sm:mb-4 lg:mb-6 hidden lg:block">
           <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">

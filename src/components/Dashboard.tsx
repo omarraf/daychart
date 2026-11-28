@@ -11,6 +11,8 @@ import SchedulesPage from './SchedulesPage';
 import SettingsPage from './SettingsPage';
 import FeedbackPage from './FeedbackPage';
 import AppDialog from './AppDialog';
+import { PanelSection } from './PanelUI';
+import { LEGAL_TITLES, LegalContent, type LegalDoc } from './LegalContent';
 import AuthButtons from './AuthButtons';
 import AIAssistant from './AIAssistant';
 import type { DisplayMessage } from './AIAssistant';
@@ -48,6 +50,8 @@ export default function Dashboard() {
   const [currentRoute, setCurrentRoute] = useState<NavRoute>('dashboard');
   // Menu panels open as popups over the chart instead of replacing it
   const [openPanel, setOpenPanel] = useState<PanelRoute | null>(null);
+  // About / Terms / Privacy open inside the Settings popup rather than a second popup
+  const [settingsDoc, setSettingsDoc] = useState<LegalDoc | null>(null);
   const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
@@ -486,7 +490,7 @@ export default function Dashboard() {
       ═══════════════════════════════════════════════════ */}
 
       {currentRoute === 'dashboard' && viewMode === 'linear' && (
-        <div className={`absolute inset-0 flex flex-col overflow-hidden ${isResizingBlockList ? '' : 'transition-[left] duration-200'}`} style={{ paddingTop: 56, left: chartLeft }}>
+        <div className={`absolute inset-0 flex flex-col overflow-hidden ${isResizingBlockList ? '' : 'transition-[left] duration-200'}`} style={{ paddingTop: 80, left: chartLeft }}>
           <Timeline
             timeBlocks={timeBlocks}
             onBlockCreated={handleBlockCreated}
@@ -496,7 +500,7 @@ export default function Dashboard() {
       )}
 
       {currentRoute === 'dashboard' && viewMode === 'circular' && (
-        <div ref={chartContainerRef} className={`absolute inset-0 flex items-center justify-center ${isResizingBlockList ? '' : 'transition-[left] duration-200'}`} style={{ left: chartLeft }}>
+        <div ref={chartContainerRef} className={`absolute inset-0 flex items-center justify-center ${isResizingBlockList ? '' : 'transition-[left] duration-200'}`} style={{ left: chartLeft, paddingTop: 40 }}>
           <CircularChart
             timeBlocks={timeBlocks}
             onBlockChanged={handleBlockChanged}
@@ -694,6 +698,29 @@ export default function Dashboard() {
              'Save'}
           </button>
         </div>
+      )}
+
+      {/* Schedule title — under the pill; opens the schedule switcher. Hidden while the
+          block list covers the canvas on phones. */}
+      {currentRoute === 'dashboard' && !(showBlockList && viewportWidth < 640) && (
+        <button
+          type="button"
+          onClick={() => setOpenPanel('schedules')}
+          className="fixed z-40 flex items-center gap-1 rounded-md border-none bg-transparent shadow-none px-2 py-0.5 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10"
+          style={{
+            top: 50,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            maxWidth: 'calc(100vw - 96px)',
+            color: 'var(--text-primary)',
+          }}
+          title="Switch schedule"
+        >
+          <span className="truncate">{currentScheduleName}</span>
+          <svg className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
       )}
 
       {/* ═══════════════════════════════════════════════════
@@ -956,7 +983,7 @@ export default function Dashboard() {
         <div style={{ borderTop: '1px solid var(--border)' }} className="py-2">
           {/* GitHub link */}
           <a
-            href="https://github.com/omarraf/time-tracker"
+            href="https://github.com/omarraf/daychart"
             target="_blank"
             rel="noopener noreferrer"
             className="w-full flex items-center gap-3 transition-colors rounded-none no-underline"
@@ -1096,14 +1123,37 @@ export default function Dashboard() {
         )}
       </AppDialog>
 
-      <AppDialog isOpen={openPanel === 'settings'} onClose={() => setOpenPanel(null)} title="Settings">
-        {user ? (
-          <SettingsPage user={user} timeBlocks={[]} currentScheduleName="" />
+      <AppDialog
+        isOpen={openPanel === 'settings'}
+        onClose={() => { setOpenPanel(null); setSettingsDoc(null); }}
+        title={settingsDoc ? LEGAL_TITLES[settingsDoc] : 'Settings'}
+      >
+        {settingsDoc ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setSettingsDoc(null)}
+              className="mb-4 inline-flex items-center gap-1 p-0 border-none bg-transparent shadow-none text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Settings
+            </button>
+            <LegalContent doc={settingsDoc} />
+          </>
         ) : (
-          <PanelSignInPrompt
-            message="Sign in to manage your profile and export your schedules."
-            onSignIn={() => { setOpenPanel(null); setShowSignInPrompt(true); }}
-          />
+          <div className="space-y-7">
+            {user ? (
+              <SettingsPage user={user} timeBlocks={[]} currentScheduleName="" />
+            ) : (
+              <PanelSignInPrompt
+                message="Sign in to manage your profile and export your schedules."
+                onSignIn={() => { setOpenPanel(null); setShowSignInPrompt(true); }}
+              />
+            )}
+            <SettingsAboutSection onOpen={setSettingsDoc} />
+          </div>
         )}
       </AppDialog>
 
@@ -1120,6 +1170,35 @@ export default function Dashboard() {
         />
       )}
     </div>
+  );
+}
+
+function SettingsAboutSection({ onOpen }: { onOpen: (doc: LegalDoc) => void }) {
+  const links: { doc: LegalDoc; label: string }[] = [
+    { doc: 'about', label: 'About DayChart' },
+    { doc: 'terms', label: 'Terms of Service' },
+    { doc: 'privacy', label: 'Privacy Policy' },
+  ];
+
+  return (
+    <PanelSection title="About">
+      <div className="rounded-lg border divide-y" style={{ borderColor: 'var(--border)' }}>
+        {links.map(({ doc, label }) => (
+          <button
+            key={doc}
+            type="button"
+            onClick={() => onOpen(doc)}
+            className="w-full flex items-center justify-between gap-4 rounded-none first:rounded-t-lg last:rounded-b-lg border-0 px-3 py-2.5 text-left text-sm font-normal bg-transparent shadow-none hover:bg-black/[0.03] dark:hover:bg-white/5"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+          >
+            {label}
+            <svg className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        ))}
+      </div>
+    </PanelSection>
   );
 }
 

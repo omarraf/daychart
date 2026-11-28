@@ -75,6 +75,57 @@ function describeLabelArc(cx: number, cy: number, r: number, startAngle: number,
 
 const MIN_VISIBLE_LABEL_CHARS = 4;
 
+// Fractional minutes since midnight, so the hand moves smoothly second by second
+const getCurrentMinutes = () => {
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+};
+
+// "1:19:42", "19:42"
+function formatCountdown(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const sec = totalSeconds % 60;
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+}
+
+// "1h 20m", "25m", "2h"
+function formatShortDuration(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m}m`;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
+// "12 PM", "9:30 AM"
+function formatClockTime(totalMinutes: number): string {
+  const minutes = ((totalMinutes % 1440) + 1440) % 1440;
+  const h24 = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const h12 = h24 % 12 || 12;
+  const period = h24 >= 12 ? 'PM' : 'AM';
+  return m ? `${h12}:${m.toString().padStart(2, '0')} ${period}` : `${h12} ${period}`;
+}
+
+// Relative luminance (WCAG) of a hex color; null if it can't be parsed
+function getLuminance(hex: string): number | null {
+  const match = hex.trim().match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!match) return null;
+  const digits = match[1].length === 3 ? match[1].replace(/./g, (c) => c + c) : match[1];
+  const [r, g, b] = [0, 2, 4].map((i) => {
+    const channel = parseInt(digits.slice(i, i + 2), 16) / 255;
+    return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+// Light blocks (yellow, lime) get dark text; mid and dark tones keep white
+function getBlockTextColor(blockColor: string): string {
+  const luminance = getLuminance(blockColor);
+  return luminance !== null && luminance > 0.55 ? '#1f2937' : '#ffffff';
+}
+
 interface CircularChartProps {
   timeBlocks: TimeBlock[];
   onBlockCreated: (startTime: string, endTime: string) => void;
@@ -86,6 +137,8 @@ interface CircularChartProps {
   readOnly?: boolean;
   previewSize?: number;
   previewCursorTime?: string;
+  // Live mode: current-time hand and a "now / next" readout in the center
+  showNow?: boolean;
 }
 
 export default function CircularChart({
@@ -99,8 +152,20 @@ export default function CircularChart({
   readOnly = false,
   previewSize,
   previewCursorTime,
+  showNow = false,
 }: CircularChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const [nowMinutes, setNowMinutes] = useState(getCurrentMinutes);
+  useEffect(() => {
+    if (!showNow) return;
+    setNowMinutes(getCurrentMinutes());
+    const interval = window.setInterval(() => setNowMinutes(getCurrentMinutes()), 1000);
+    return () => window.clearInterval(interval);
+  }, [showNow]);
+  // Mouse users see resize dots only on the hovered block; touch users always see them
+  const [canHover] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia?.('(hover: hover) and (pointer: fine)').matches
+  );
   const labelIdPrefix = `block-label-${useId().replace(/:/g, '')}`;
   // Labels are fitted using measured text widths, so re-fit once web fonts finish loading
   const [, setFontsLoaded] = useState(false);
@@ -500,9 +565,9 @@ export default function CircularChart({
           y={y}
           textAnchor="middle"
           dominantBaseline="middle"
-          fill="var(--chart-label)"
-          fontSize="12"
-          fontWeight="600"
+          fill="var(--text-muted)"
+          fontSize={isMobile ? 10 : 11}
+          fontWeight="500"
         >
           {formatHourTo12Hour(hour)}
         </text>
@@ -512,19 +577,18 @@ export default function CircularChart({
     return labels;
   };
 
-  const getTextColor = (): string => {
-    return '#ffffff';
-  };
-
   const renderHourTicks = () => {
     const ticks = [];
     for (let i = 0; i < 24; i++) {
       const angle = (i / 24) * 360;
       const angleRad = ((angle - 90) * Math.PI) / 180;
+      // Every third hour (the labelled ones) gets a slightly longer, stronger tick
+      const isMajor = i % 3 === 0;
+      const outerOffset = isMajor ? tickOuterOffset : tickInnerOffset + (tickOuterOffset - tickInnerOffset) * 0.6;
       const x1 = center + (radius + tickInnerOffset) * Math.cos(angleRad);
       const y1 = center + (radius + tickInnerOffset) * Math.sin(angleRad);
-      const x2 = center + (radius + tickOuterOffset) * Math.cos(angleRad);
-      const y2 = center + (radius + tickOuterOffset) * Math.sin(angleRad);
+      const x2 = center + (radius + outerOffset) * Math.cos(angleRad);
+      const y2 = center + (radius + outerOffset) * Math.sin(angleRad);
 
       ticks.push(
         <line
@@ -534,7 +598,9 @@ export default function CircularChart({
           x2={x2}
           y2={y2}
           stroke="var(--chart-tick)"
-          strokeWidth="2"
+          strokeWidth={isMajor ? 1.5 : 1}
+          strokeLinecap="round"
+          opacity={isMajor ? 0.9 : 0.55}
         />
       );
     }
@@ -736,6 +802,64 @@ export default function CircularChart({
     });
   };
 
+  const ringSegmentPath = (startAngle: number, endAngle: number) => {
+    const span = Math.min(endAngle - startAngle, 359.99);
+    const a0 = ((startAngle - 90) * Math.PI) / 180;
+    const a1 = ((startAngle + span - 90) * Math.PI) / 180;
+    const largeArc = span > 180 ? 1 : 0;
+    return `M ${center + innerRadius * Math.cos(a0)} ${center + innerRadius * Math.sin(a0)}
+      L ${center + radius * Math.cos(a0)} ${center + radius * Math.sin(a0)}
+      A ${radius} ${radius} 0 ${largeArc} 1 ${center + radius * Math.cos(a1)} ${center + radius * Math.sin(a1)}
+      L ${center + innerRadius * Math.cos(a1)} ${center + innerRadius * Math.sin(a1)}
+      A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${center + innerRadius * Math.cos(a0)} ${center + innerRadius * Math.sin(a0)} Z`;
+  };
+
+  /**
+   * Live mode: wash out time that has already passed. Finished blocks fade completely,
+   * the current block fades from its start up to the hand, upcoming blocks stay vivid.
+   */
+  const getElapsedWash = (block: TimeBlock, startAngle: number) => {
+    if (!showNow) return null;
+    const start = timeStringToMinutes(block.startTime);
+    const duration = calculateDuration(block.startTime, block.endTime);
+    const elapsed = (nowMinutes - start + 1440) % 1440;
+    if (elapsed < duration) {
+      return { path: ringSegmentPath(startAngle, startAngle + minutesToAngle(elapsed)), isPast: false };
+    }
+    const isPast = start + duration <= 1440 && start + duration <= nowMinutes;
+    return isPast ? { path: ringSegmentPath(startAngle, startAngle + minutesToAngle(duration)), isPast: true } : null;
+  };
+
+  const renderNowHand = () => {
+    if (!showNow) return null;
+    const angleRad = ((minutesToAngle(nowMinutes) - 90) * Math.PI) / 180;
+    const from = innerRadius - 6;
+    const to = radius + tickOuterOffset;
+    return (
+      <g pointerEvents="none" aria-hidden="true">
+        <line
+          x1={center + from * Math.cos(angleRad)}
+          y1={center + from * Math.sin(angleRad)}
+          x2={center + to * Math.cos(angleRad)}
+          y2={center + to * Math.sin(angleRad)}
+          stroke="#ef4444"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+        {/* Expanding ring behind the tip reads as "live"; disabled for reduced motion */}
+        <circle
+          cx={center + to * Math.cos(angleRad)}
+          cy={center + to * Math.sin(angleRad)}
+          r="3.5"
+          fill="#ef4444"
+          className="animate-ping motion-reduce:hidden"
+          style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
+        />
+        <circle cx={center + to * Math.cos(angleRad)} cy={center + to * Math.sin(angleRad)} r="3.5" fill="#ef4444" />
+      </g>
+    );
+  };
+
   const renderTimeBlocks = () => {
     return timeBlocks.map((originalBlock) => {
       const block = blockPreview?.id === originalBlock.id ? blockPreview : originalBlock;
@@ -769,12 +893,15 @@ export default function CircularChart({
       `;
 
       const labelLayout = getBlockLabelLayout(block, startAngle, endAngle);
+      const elapsedWash = getElapsedWash(block, startAngle);
 
-      const textColor = getTextColor();
+      const textColor = getBlockTextColor(block.color);
       const isHovered = hoveredBlock?.id === block.id || activeBlock?.id === block.id;
+      const showHandles = !canHover || isHovered || blockPreview?.id === block.id;
 
       return (
-        <g key={block.id}>
+        // Hover lives on the group so moving from the block onto its handles keeps them visible
+        <g key={block.id} onMouseEnter={() => setHoveredBlock(block)} onMouseLeave={() => setHoveredBlock(null)}>
           <path
             d={path}
             fill={block.color}
@@ -795,10 +922,22 @@ export default function CircularChart({
             onPointerDown={(event) => startBlockDrag(event, originalBlock, 'move')}
             onMouseDown={(event) => event.stopPropagation()}
             onTouchStart={(event) => event.stopPropagation()}
-            onMouseEnter={() => setHoveredBlock(block)}
-            onMouseLeave={() => setHoveredBlock(null)}
           />
-          {labelLayout && renderBlockLabel(block.id, labelLayout, startAngle, endAngle, textColor)}
+          {elapsedWash && (
+            <path d={elapsedWash.path} fill="var(--page-bg)" opacity={0.5} pointerEvents="none" />
+          )}
+          {labelLayout && (
+            <g opacity={elapsedWash?.isPast ? 0.75 : 1}>
+              {renderBlockLabel(
+                block.id,
+                labelLayout,
+                startAngle,
+                endAngle,
+                // A washed-out light block turns dark in dark mode, so its dark text switches to the theme color
+                elapsedWash?.isPast && textColor !== '#ffffff' ? 'var(--text-primary)' : textColor,
+              )}
+            </g>
+          )}
           {!readOnly && (['start', 'end'] as const).map((edge) => {
             const edgeAngle = edge === 'start' ? startAngleRad : endAngleRad;
             const handleRadius = edge === 'start'
@@ -814,7 +953,8 @@ export default function CircularChart({
                 <circle cx={center + handleRadius * Math.cos(edgeAngle)} cy={center + handleRadius * Math.sin(edgeAngle)}
                   r={isMobile ? 13 : 10} fill="transparent" />
                 <circle cx={center + handleRadius * Math.cos(edgeAngle)} cy={center + handleRadius * Math.sin(edgeAngle)}
-                  r={isMobile ? 4 : 3} fill="white" stroke={block.color} strokeWidth="1.5" pointerEvents="none" />
+                  r={isMobile ? 4 : 3} fill="white" stroke={block.color} strokeWidth="1.5" pointerEvents="none"
+                  opacity={showHandles ? 1 : 0} style={{ transition: 'opacity 120ms ease' }} />
               </g>
             );
           })}
@@ -976,6 +1116,45 @@ export default function CircularChart({
       );
     }
 
+    // Live mode at rest: what's happening now, or what's next
+    if (showNow && timeBlocks.length > 0) {
+      let current: { block: TimeBlock; secondsLeft: number; endMinutes: number } | null = null;
+      let next: { block: TimeBlock; minutesUntil: number } | null = null;
+
+      for (const block of timeBlocks) {
+        const start = timeStringToMinutes(block.startTime);
+        const duration = calculateDuration(block.startTime, block.endTime);
+        const elapsed = (nowMinutes - start + 1440) % 1440;
+        if (elapsed < duration) {
+          current = { block, secondsLeft: Math.ceil((duration - elapsed) * 60), endMinutes: start + duration };
+        }
+        const minutesUntil = (start - nowMinutes + 1440) % 1440;
+        if (minutesUntil > 0 && (!next || minutesUntil < next.minutesUntil)) {
+          next = { block, minutesUntil };
+        }
+      }
+
+      const lines = current
+        ? [current.block.label, `${formatCountdown(current.secondsLeft)} left`, `until ${formatClockTime(current.endMinutes)}`]
+        : ['Free now', next ? `Next: ${next.block.label}` : '', next ? `in ${formatShortDuration(Math.ceil(next.minutesUntil))}` : ''];
+      const nameFontSize = isMobile ? 14 : 16;
+      const detailFontSize = isMobile ? 10 : 12;
+
+      return (
+        <g pointerEvents="none">
+          <text x={center} y={center - 16} textAnchor="middle" dominantBaseline="middle" fill="var(--chart-label)" fontWeight="600" fontSize={nameFontSize}>
+            {lines[0]}
+          </text>
+          <text x={center} y={center + 4} textAnchor="middle" dominantBaseline="middle" fill="var(--chart-label)" fontSize={detailFontSize} style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {lines[1]}
+          </text>
+          <text x={center} y={center + 20} textAnchor="middle" dominantBaseline="middle" fill="var(--chart-tick)" fontSize={detailFontSize}>
+            {lines[2]}
+          </text>
+        </g>
+      );
+    }
+
     // Resting: total scheduled time
     if (totalScheduledMinutes > 0) {
       const bigFontSize = isMobile ? 20 : 26;
@@ -1060,6 +1239,7 @@ export default function CircularChart({
         {renderHourTicks()}
         {renderTimeBlocks()}
         {renderInnerCallouts()}
+        {renderNowHand()}
         {previewCursorTime && (() => {
           const angle = (timeStringToMinutes(previewCursorTime) / (24 * 60)) * 2 * Math.PI - Math.PI / 2;
           const cursorRadius = (radius + innerRadius) / 2;

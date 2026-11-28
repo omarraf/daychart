@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react';
 import type { User } from 'firebase/auth';
 import type { Schedule } from '../types/schedule';
 import { getUserSchedules } from '../services/scheduleService';
+import { PanelSection, SelectField } from './PanelUI';
 // Payment UI temporarily hidden; keep billing integration for re-enabling.
 // import { getBillingStatus, createCheckoutSession, openCustomerPortal } from '../services/billingService';
 // import type { BillingStatus } from '../services/billingService';
 // import { getUsage } from '../services/aiService';
 // import type { UsageInfo } from '../services/aiService';
-import Footer from './Footer';
 
 interface SettingsPageProps {
   user: User;
@@ -150,34 +150,26 @@ export default function SettingsPage({ user }: SettingsPageProps) {
     URL.revokeObjectURL(url);
   };
 
+  const exportButtonClass = 'w-full flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left bg-transparent shadow-none transition-colors hover:bg-black/[0.03] dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed';
+  const exportDisabled = !selectedSchedule || selectedSchedule.timeBlocks.length === 0;
+  const memberSince = user.metadata.creationTime
+    ? new Date(user.metadata.creationTime).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+    : 'Unknown';
+
   return (
-    <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-gray-50 dark:bg-gray-950">
-      <div className="max-w-3xl mx-auto space-y-8">
-        {/* Profile Section */}
-        <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-            <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-            Profile
-          </h3>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
-              <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100">
-                {user.email}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Account Created</label>
-              <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100">
-                {user.metadata.creationTime ? new Date(user.metadata.creationTime).toLocaleDateString() : 'Unknown'}
-              </div>
-            </div>
+    <div className="space-y-7">
+      <PanelSection title="Account">
+        <dl className="my-0 rounded-lg border divide-y text-sm" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-center justify-between gap-4 px-3 py-2.5" style={{ borderColor: 'var(--border)' }}>
+            <dt style={{ color: 'var(--text-muted)' }}>Email</dt>
+            <dd className="m-0 truncate font-medium" style={{ color: 'var(--text-primary)' }}>{user.email}</dd>
           </div>
-        </section>
+          <div className="flex items-center justify-between gap-4 px-3 py-2.5" style={{ borderColor: 'var(--border)' }}>
+            <dt style={{ color: 'var(--text-muted)' }}>Member since</dt>
+            <dd className="m-0 font-medium" style={{ color: 'var(--text-primary)' }}>{memberSince}</dd>
+          </div>
+        </dl>
+      </PanelSection>
 
         {/* Subscription Section — temporarily hidden
         <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
@@ -301,109 +293,66 @@ export default function SettingsPage({ user }: SettingsPageProps) {
         </section>
         */}
 
-        {/* Export Section */}
-        <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-            <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-            </svg>
-            Export Schedule
-          </h3>
+      <PanelSection title="Export" description="Download a schedule to back it up or use it elsewhere.">
+        {allSchedules.length > 0 ? (
+          <div className="space-y-3">
+            <SelectField
+              id="export-schedule"
+              aria-label="Schedule to export"
+              value={selectedScheduleId}
+              onChange={(e) => setSelectedScheduleId(e.target.value)}
+            >
+              {allSchedules.map(schedule => (
+                <option key={schedule.id} value={schedule.id}>
+                  {schedule.name} ({schedule.timeBlocks.length} blocks)
+                </option>
+              ))}
+            </SelectField>
 
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Select a schedule to export in different formats
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button type="button" onClick={handleExportJSON} disabled={exportDisabled} className={exportButtonClass} style={{ borderColor: 'var(--border)' }}>
+                <svg className="w-5 h-5 flex-shrink-0 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>JSON</span>
+                  <span className="block text-xs" style={{ color: 'var(--text-muted)' }}>Backup and re-import</span>
+                </span>
+              </button>
+              <button type="button" onClick={handleExportCSV} disabled={exportDisabled} className={exportButtonClass} style={{ borderColor: 'var(--border)' }}>
+                <svg className="w-5 h-5 flex-shrink-0 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>CSV</span>
+                  <span className="block text-xs" style={{ color: 'var(--text-muted)' }}>Open in Excel or Sheets</span>
+                </span>
+              </button>
+            </div>
+
+            {selectedSchedule && selectedSchedule.timeBlocks.length === 0 && (
+              <p className="text-xs my-0" style={{ color: 'var(--text-muted)' }}>
+                This schedule is empty. Add some time blocks before exporting.
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={handleExportAllJSON}
+              className="inline-flex items-center gap-1.5 p-0 border-none bg-transparent shadow-none text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export all {allSchedules.length} schedule{allSchedules.length !== 1 ? 's' : ''} as JSON
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm my-0" style={{ color: 'var(--text-muted)' }}>
+            No schedules yet. Create one to export it.
           </p>
-
-          {/* Schedule Selector */}
-          {allSchedules.length > 0 ? (
-            <>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Choose Schedule</label>
-                <select
-                  value={selectedScheduleId}
-                  onChange={(e) => setSelectedScheduleId(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  {allSchedules.map(schedule => (
-                    <option key={schedule.id} value={schedule.id}>
-                      {schedule.name} ({schedule.timeBlocks.length} blocks)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-3">
-                <button
-                  onClick={handleExportJSON}
-                  disabled={!selectedSchedule || selectedSchedule.timeBlocks.length === 0}
-                  className="w-full px-4 py-3 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between group border border-blue-100 dark:border-blue-800/40"
-                >
-                  <span className="flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    Export as JSON
-                  </span>
-                  <span className="text-xs text-blue-600 dark:text-blue-400 group-hover:text-blue-700 dark:group-hover:text-blue-300">Best for backup & re-import</span>
-                </button>
-
-                <button
-                  onClick={handleExportCSV}
-                  disabled={!selectedSchedule || selectedSchedule.timeBlocks.length === 0}
-                  className="w-full px-4 py-3 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between group border border-green-100 dark:border-green-800/40"
-                >
-                  <span className="flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                    Export as CSV
-                  </span>
-                  <span className="text-xs text-green-600 dark:text-green-400 group-hover:text-green-700 dark:group-hover:text-green-300">Open in Excel/Sheets</span>
-                </button>
-
-                {/* Divider */}
-                <div className="relative my-2">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
-                  </div>
-                  <div className="relative flex justify-center text-xs">
-                    <span className="px-2 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400">or export all</span>
-                  </div>
-                </div>
-
-                {/* Export All Schedules */}
-                <button
-                  onClick={handleExportAllJSON}
-                  disabled={allSchedules.length === 0}
-                  className="w-full px-4 py-3 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between group border border-purple-100 dark:border-purple-800/40"
-                >
-                  <span className="flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    Export All Schedules
-                  </span>
-                  <span className="text-xs text-purple-600 dark:text-purple-400 group-hover:text-purple-700 dark:group-hover:text-purple-300">
-                    {allSchedules.length} schedule{allSchedules.length !== 1 ? 's' : ''}
-                  </span>
-                </button>
-
-                {selectedSchedule && selectedSchedule.timeBlocks.length === 0 && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                    This schedule is empty. Add some time blocks before exporting.
-                  </p>
-                )}
-              </div>
-            </>
-          ) : (
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              No schedules available. Create a schedule to export.
-            </p>
-          )}
-        </section>
-
-      </div>
-      <Footer />
+        )}
+      </PanelSection>
     </div>
   );
 }

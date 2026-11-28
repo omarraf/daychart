@@ -9,7 +9,7 @@ import {
   saveSchedule,
   updateSchedule,
 } from '../services/scheduleService';
-import { formatTo12Hour } from '../utils/timeUtils';
+import { calculateDuration, timeStringToMinutes } from '../utils/timeUtils';
 
 interface SchedulesPageProps {
   user: User;
@@ -28,6 +28,9 @@ export default function SchedulesPage({
   const [newScheduleName, setNewScheduleName] = useState('');
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [editingScheduleName, setEditingScheduleName] = useState('');
+  // Destructive/duplicating actions confirm inline (✕ / ✓) instead of a browser dialog
+  const [pendingAction, setPendingAction] = useState<{ id: string; type: 'duplicate' | 'delete' } | null>(null);
+  const [error, setError] = useState('');
 
   const loadSchedules = useCallback(async () => {
     setIsLoading(true);
@@ -47,6 +50,7 @@ export default function SchedulesPage({
 
   const handleCreateSchedule = async () => {
     if (!newScheduleName.trim()) return;
+    setError('');
 
     try {
       const newId = await saveSchedule(user.uid, {
@@ -61,33 +65,30 @@ export default function SchedulesPage({
       onScheduleSelect(newId);
     } catch (error) {
       console.error('Error creating schedule:', error);
-      if (error instanceof Error && error.message.includes('Maximum 10 schedules')) {
-        alert(error.message);
-      } else {
-        alert('Failed to create schedule');
-      }
+      setError(error instanceof Error && error.message.includes('Maximum 10 schedules')
+        ? error.message
+        : 'Failed to create schedule');
     }
   };
 
   const handleDuplicate = async (scheduleId: string, name: string) => {
-    if (!confirm(`Duplicate "${name}"?`)) return;
+    setPendingAction(null);
+    setError('');
 
     try {
       await duplicateSchedule(scheduleId, user.uid, `${name} (Copy)`);
       await loadSchedules();
-      alert('Schedule duplicated successfully');
     } catch (error) {
       console.error('Error duplicating schedule:', error);
-      if (error instanceof Error && error.message.includes('Maximum 10 schedules')) {
-        alert(error.message);
-      } else {
-        alert('Failed to duplicate schedule');
-      }
+      setError(error instanceof Error && error.message.includes('Maximum 10 schedules')
+        ? error.message
+        : 'Failed to duplicate schedule');
     }
   };
 
-  const handleDelete = async (scheduleId: string, name: string) => {
-    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  const handleDelete = async (scheduleId: string) => {
+    setPendingAction(null);
+    setError('');
 
     try {
       await deleteSchedule(scheduleId, user.uid);
@@ -102,7 +103,7 @@ export default function SchedulesPage({
       }
     } catch (error) {
       console.error('Error deleting schedule:', error);
-      alert('Failed to delete schedule');
+      setError('Failed to delete schedule');
     }
   };
 
@@ -112,7 +113,7 @@ export default function SchedulesPage({
       await loadSchedules();
     } catch (error) {
       console.error('Error setting default:', error);
-      alert('Failed to set default schedule');
+      setError('Failed to set default schedule');
     }
   };
 
@@ -128,9 +129,10 @@ export default function SchedulesPage({
 
   const handleSaveEdit = async (scheduleId: string) => {
     if (!editingScheduleName.trim()) {
-      alert('Schedule name cannot be empty');
+      setError('Schedule name cannot be empty');
       return;
     }
+    setError('');
 
     try {
       await updateSchedule(scheduleId, user.uid, {
@@ -141,240 +143,262 @@ export default function SchedulesPage({
       setEditingScheduleName('');
     } catch (error) {
       console.error('Error updating schedule name:', error);
-      alert('Failed to update schedule name');
+      setError('Failed to update schedule name');
     }
   };
 
+  const iconButtonClass = 'w-8 h-8 p-0 flex items-center justify-center rounded-lg border-none bg-transparent shadow-none transition-colors hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed';
+  const atLimit = schedules.length >= 10;
+
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8 bg-gray-50 dark:bg-gray-950">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-gray-600 dark:text-gray-400">Loading schedules...</p>
-        </div>
+      <div className="flex items-center justify-center py-12">
+        <div className="w-8 h-8 border-[3px] border-blue-600 border-t-transparent rounded-full animate-spin" aria-label="Loading schedules" />
       </div>
     );
   }
 
   return (
-    <div className="flex-1 bg-gray-50 dark:bg-gray-950 p-4 sm:p-8 overflow-auto">
-      <div className="max-w-4xl mx-auto">
-        {/* Header with Create Button */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">Your Schedules</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              Manage your time schedules and templates {schedules.length > 0 && (
-                <span className={`ml-2 font-medium ${schedules.length >= 10 ? 'text-red-600 dark:text-red-400' : schedules.length >= 8 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-600 dark:text-gray-400'}`}>
-                  ({schedules.length}/10 schedules)
-                </span>
-              )}
-            </p>
-          </div>
+    <div>
+      {/* Header: count + create */}
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <p className={`text-sm my-0 ${atLimit ? 'text-red-600 dark:text-red-400' : ''}`} style={atLimit ? undefined : { color: 'var(--text-muted)' }}>
+          {schedules.length} of 10 schedules
+        </p>
+        {!isCreating && (
           <button
             onClick={() => setIsCreating(true)}
-            disabled={schedules.length >= 10}
-            className="px-4 py-2 sm:px-6 sm:py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed border-none whitespace-nowrap flex-shrink-0 text-sm sm:text-base"
-            title={schedules.length >= 10 ? 'Maximum 10 schedules reached' : 'Create a new schedule'}
+            disabled={atLimit}
+            className="h-9 inline-flex items-center gap-1.5 px-3 py-0 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold border-none disabled:opacity-50 disabled:cursor-not-allowed"
+            title={atLimit ? 'Maximum 10 schedules reached' : 'Create a new schedule'}
           >
-            <span>+ New Schedule</span>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 5v14M5 12h14" />
+            </svg>
+            New schedule
+          </button>
+        )}
+      </div>
+
+      {error && (
+        <div role="alert" className="mb-4 rounded-lg px-3 py-2.5 text-sm" style={{ background: 'rgba(239,68,68,0.1)', color: '#dc2626' }}>
+          {error}
+        </div>
+      )}
+
+      {/* Create Schedule Form */}
+      {isCreating && (
+        <div className="mb-4 flex items-center gap-2">
+          <input
+            type="text"
+            value={newScheduleName}
+            onChange={(e) => setNewScheduleName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleCreateSchedule();
+              if (e.key === 'Escape') { e.stopPropagation(); setIsCreating(false); setNewScheduleName(''); }
+            }}
+            placeholder="Schedule name, e.g. Work week"
+            aria-label="New schedule name"
+            className="flex-1 min-w-0 h-10 px-3 mb-0 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+            autoFocus
+          />
+          <button
+            onClick={() => { setIsCreating(false); setNewScheduleName(''); }}
+            className={`${iconButtonClass} w-10 h-10`}
+            style={{ color: 'var(--text-muted)' }}
+            aria-label="Cancel"
+            title="Cancel"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <button
+            onClick={handleCreateSchedule}
+            disabled={!newScheduleName.trim()}
+            className="w-10 h-10 p-0 flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 text-white border-none disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Create schedule"
+            title="Create"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+            </svg>
           </button>
         </div>
+      )}
 
-        {/* Create Schedule Form */}
-        {isCreating && (
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-6 mb-6">
-            <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-4">Create New Schedule</h4>
-            <div className="flex gap-3">
-              <input
-                type="text"
-                value={newScheduleName}
-                onChange={(e) => setNewScheduleName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleCreateSchedule()}
-                placeholder="Schedule name (e.g., Work Week, Weekend)"
-                className="flex-1 px-4 py-2 border-2 border-gray-200 dark:border-gray-700 rounded-lg focus:border-blue-500 focus:outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
-                autoFocus
-              />
-              <button
-                onClick={handleCreateSchedule}
-                disabled={!newScheduleName.trim()}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-none"
-              >
-                Create
-              </button>
-              <button
-                onClick={() => {
-                  setIsCreating(false);
-                  setNewScheduleName('');
-                }}
-                className="px-6 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors border-none"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
+      {/* Schedules List */}
+      {schedules.length === 0 ? (
+        <div className="py-10 text-center">
+          <p className="text-sm font-medium my-0" style={{ color: 'var(--text-primary)' }}>No schedules yet</p>
+          <p className="text-sm mt-1 mb-0" style={{ color: 'var(--text-muted)' }}>
+            Create your first schedule to start organizing your time.
+          </p>
+        </div>
+      ) : (
+        <ul className="list-none m-0 p-0 space-y-2">
+          {schedules.map((schedule) => {
+            const isActive = schedule.id === currentScheduleId;
+            const pending = pendingAction?.id === schedule.id ? pendingAction : null;
+            const isEditing = editingScheduleId === schedule.id;
+            const isClickable = !isActive && !pending && !isEditing;
 
-        {/* Schedules List */}
-        {schedules.length === 0 ? (
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-12 text-center">
-            <div className="text-6xl mb-4">📅</div>
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
-              No schedules yet
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Create your first schedule to start organizing your time
-            </p>
-            <button
-              onClick={() => setIsCreating(true)}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors border-none"
-            >
-              Create Schedule
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {schedules.map((schedule) => (
-              <div
+            return (
+              <li
                 key={schedule.id}
-                className={`bg-white dark:bg-gray-900 rounded-xl shadow-sm border-2 transition-all hover:shadow-md ${
-                  schedule.id === currentScheduleId
-                    ? 'border-blue-500 ring-2 ring-blue-100 dark:ring-blue-900/30'
-                    : 'border-gray-200 dark:border-gray-800'
+                className={`relative rounded-xl border p-3 transition-colors ${
+                  isActive ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-900/15' : isClickable ? 'hover:bg-black/[0.02] dark:hover:bg-white/[0.03]' : ''
                 }`}
+                style={isActive ? undefined : { borderColor: 'var(--border)' }}
               >
-                <div className="p-4 sm:p-6">
-                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                    <div className="flex-1">
-                      {editingScheduleId === schedule.id ? (
-                        // Edit mode
-                        <div className="mb-2">
-                          <div className="flex gap-2 items-center">
-                            <input
-                              type="text"
-                              value={editingScheduleName}
-                              onChange={(e) => setEditingScheduleName(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleSaveEdit(schedule.id);
-                                if (e.key === 'Escape') handleCancelEdit();
-                              }}
-                              className="flex-1 px-3 py-1.5 border-2 border-blue-500 rounded-lg focus:outline-none text-lg font-semibold bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                              autoFocus
-                            />
-                            <button
-                              onClick={() => handleSaveEdit(schedule.id)}
-                              className="px-3 py-1.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors text-sm border-none"
-                            >
-                              Save
-                            </button>
-                            <button
-                              onClick={handleCancelEdit}
-                              className="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors text-sm border-none"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        // View mode
-                        <div className="flex items-center gap-3 mb-2">
-                          <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                            {schedule.name}
-                          </h4>
-                          <button
-                            onClick={() => handleStartEdit(schedule.id, schedule.name)}
-                            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors border-none bg-transparent"
-                            title="Edit schedule name"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                            </svg>
-                          </button>
-                          {schedule.isDefault && (
-                            <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-medium rounded">
-                              Default
-                            </span>
-                          )}
-                          {schedule.id === currentScheduleId && (
-                            <span className="px-2 py-1 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 text-xs font-medium rounded">
-                              Active
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-                        <span>{schedule.timeBlocks.length} time blocks</span>
-                        <span>•</span>
-                        <span>
-                          Updated {new Date(schedule.updatedAt).toLocaleDateString()}
-                        </span>
+                {/* The whole card opens the schedule; buttons inside sit above this layer */}
+                {isClickable && (
+                  <button
+                    type="button"
+                    onClick={() => onScheduleSelect(schedule.id)}
+                    aria-label={`Open ${schedule.name}`}
+                    className="absolute inset-0 w-full h-full p-0 rounded-xl border-none bg-transparent shadow-none cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  />
+                )}
+                <div className="relative pointer-events-none flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                  <div className="flex-1 min-w-0">
+                    {isEditing ? (
+                      <div className="flex items-center gap-1.5 pointer-events-auto">
+                        <input
+                          type="text"
+                          value={editingScheduleName}
+                          onChange={(e) => setEditingScheduleName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveEdit(schedule.id);
+                            if (e.key === 'Escape') { e.stopPropagation(); handleCancelEdit(); }
+                          }}
+                          aria-label="Schedule name"
+                          className="flex-1 min-w-0 h-8 px-2.5 mb-0 rounded-lg border border-blue-500 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          style={{ background: 'var(--surface)', color: 'var(--text-primary)' }}
+                          autoFocus
+                        />
+                        <button onClick={handleCancelEdit} className={iconButtonClass} style={{ color: 'var(--text-muted)' }} aria-label="Cancel rename" title="Cancel">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                        <button onClick={() => handleSaveEdit(schedule.id)} className="w-8 h-8 p-0 flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 text-white border-none" aria-label="Save name" title="Save">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </button>
                       </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex gap-2 flex-wrap sm:justify-end">
-                      {schedule.id !== currentScheduleId && (
+                    ) : (
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{schedule.name}</span>
                         <button
-                          onClick={() => onScheduleSelect(schedule.id)}
-                          className="px-4 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg font-medium hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors text-sm border-none"
+                          onClick={() => handleStartEdit(schedule.id, schedule.name)}
+                          className="pointer-events-auto w-6 h-6 p-0 flex-shrink-0 flex items-center justify-center rounded-md border-none bg-transparent shadow-none hover:bg-black/5 dark:hover:bg-white/10"
+                          style={{ color: 'var(--text-muted)' }}
+                          aria-label={`Rename ${schedule.name}`}
+                          title="Rename"
                         >
-                          Open
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
                         </button>
-                      )}
-                      {!schedule.isDefault && (
-                        <button
-                          onClick={() => handleSetDefault(schedule.id)}
-                          className="px-4 py-2 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm border-none"
-                          title="Set as default"
-                        >
-                          Set Default
-                        </button>
-                      )}
-                      <button
-                        onClick={() => handleDuplicate(schedule.id, schedule.name)}
-                        disabled={schedules.length >= 10}
-                        className="px-4 py-2 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm border-none disabled:opacity-50 disabled:cursor-not-allowed"
-                        title={schedules.length >= 10 ? 'Maximum 10 schedules reached' : 'Duplicate'}
-                      >
-                        Duplicate
-                      </button>
-                      <button
-                        onClick={() => handleDelete(schedule.id, schedule.name)}
-                        className="px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg font-medium hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-sm border-none"
-                        title="Delete"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Time blocks preview */}
-                  {schedule.timeBlocks.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-                      <div className="flex gap-2 flex-wrap">
-                        {schedule.timeBlocks.slice(0, 5).map((block) => (
-                          <div
-                            key={block.id}
-                            className="px-3 py-1.5 rounded-lg text-white text-xs font-medium"
-                            style={{ backgroundColor: block.color }}
-                          >
-                            {block.label} ({formatTo12Hour(block.startTime)}-{formatTo12Hour(block.endTime)})
-                          </div>
-                        ))}
-                        {schedule.timeBlocks.length > 5 && (
-                          <div className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 text-xs font-medium">
-                            +{schedule.timeBlocks.length - 5} more
-                          </div>
+                        {isActive && (
+                          <span className="flex-shrink-0 px-1.5 py-0.5 rounded text-[11px] font-medium bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">Active</span>
                         )}
                       </div>
+                    )}
+                    <p className="text-xs mt-0.5 mb-0" style={{ color: 'var(--text-muted)' }}>
+                      {schedule.timeBlocks.length} block{schedule.timeBlocks.length !== 1 ? 's' : ''} · Updated{' '}
+                      {new Date(schedule.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    </p>
+                  </div>
+
+                  {/* Actions, or an inline ✕ / ✓ confirmation */}
+                  {pending ? (
+                    <div className="pointer-events-auto flex items-center gap-1.5 flex-shrink-0 self-end sm:self-auto">
+                      <span className="text-xs font-medium mr-1" style={{ color: 'var(--text-primary)' }}>
+                        {pending.type === 'delete' ? 'Delete?' : 'Duplicate?'}
+                      </span>
+                      <button onClick={() => setPendingAction(null)} className={iconButtonClass} style={{ color: 'var(--text-muted)' }} aria-label="Cancel" title="Cancel">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => pending.type === 'delete' ? handleDelete(schedule.id) : handleDuplicate(schedule.id, schedule.name)}
+                        className={`w-8 h-8 p-0 flex items-center justify-center rounded-lg text-white border-none ${pending.type === 'delete' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                        aria-label={pending.type === 'delete' ? `Confirm delete ${schedule.name}` : `Confirm duplicate ${schedule.name}`}
+                        title="Confirm"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </button>
+                    </div>
+                  ) : !isEditing && (
+                    <div className="pointer-events-auto flex items-center gap-0.5 flex-shrink-0 self-end sm:self-auto" style={{ color: 'var(--text-muted)' }}>
+                      <button
+                        onClick={() => { if (!schedule.isDefault) handleSetDefault(schedule.id); }}
+                        className={`${iconButtonClass} ${schedule.isDefault ? 'text-amber-500 dark:text-amber-400 cursor-default hover:bg-transparent dark:hover:bg-transparent' : ''}`}
+                        aria-pressed={schedule.isDefault}
+                        aria-label={schedule.isDefault ? `${schedule.name} opens on startup` : `Open ${schedule.name} on startup`}
+                        title={schedule.isDefault ? 'Opens on startup' : 'Open this schedule on startup'}
+                      >
+                        <svg className="w-4 h-4" fill={schedule.isDefault ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.48 3.5a.56.56 0 011.04 0l2.13 5.11a.56.56 0 00.47.35l5.52.44c.5.04.7.66.32.99l-4.2 3.6a.56.56 0 00-.18.56l1.28 5.38a.56.56 0 01-.84.61l-4.72-2.88a.56.56 0 00-.59 0l-4.72 2.88a.56.56 0 01-.84-.61l1.28-5.38a.56.56 0 00-.18-.56l-4.2-3.6a.56.56 0 01.32-.99l5.52-.44a.56.56 0 00.47-.35l2.13-5.11z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => setPendingAction({ id: schedule.id, type: 'duplicate' })}
+                        disabled={atLimit}
+                        className={iconButtonClass}
+                        aria-label={`Duplicate ${schedule.name}`}
+                        title={atLimit ? 'Maximum 10 schedules reached' : 'Duplicate'}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => setPendingAction({ id: schedule.id, type: 'delete' })}
+                        className={`${iconButtonClass} hover:text-red-600 dark:hover:text-red-400`}
+                        aria-label={`Delete ${schedule.name}`}
+                        title="Delete"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
                     </div>
                   )}
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+
+                {/* Mini 24h strip: where this schedule's blocks fall in the day */}
+                {schedule.timeBlocks.length > 0 && (
+                  <div className="relative pointer-events-none mt-2.5 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }} aria-hidden="true">
+                    {schedule.timeBlocks.map((block) => {
+                      const start = timeStringToMinutes(block.startTime);
+                      const duration = calculateDuration(block.startTime, block.endTime);
+                      return (
+                        <div
+                          key={block.id}
+                          className="absolute top-0 h-full"
+                          style={{
+                            left: `${(start / 1440) * 100}%`,
+                            width: `${(Math.min(duration, 1440 - start) / 1440) * 100}%`,
+                            background: block.color,
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

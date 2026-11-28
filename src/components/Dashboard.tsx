@@ -10,11 +10,16 @@ import ExportPreviewModal from './ExportPreviewModal';
 import SchedulesPage from './SchedulesPage';
 import SettingsPage from './SettingsPage';
 import FeedbackPage from './FeedbackPage';
+import AppDialog from './AppDialog';
 import AuthButtons from './AuthButtons';
 import AIAssistant from './AIAssistant';
 import type { DisplayMessage } from './AIAssistant';
 import LandingPage from './LandingPage';
 import type { NavRoute, TimeBlock } from '../types/schedule';
+
+type PanelRoute = Extract<NavRoute, 'schedules' | 'settings' | 'feedback'>;
+const PANEL_ROUTES: readonly NavRoute[] = ['schedules', 'settings', 'feedback'];
+const isPanelRoute = (route: NavRoute): route is PanelRoute => PANEL_ROUTES.includes(route);
 import {
   saveSchedule,
   updateSchedule,
@@ -41,10 +46,30 @@ export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null);
   const [isGuestMode, setIsGuestMode] = useState(false);
   const [currentRoute, setCurrentRoute] = useState<NavRoute>('dashboard');
+  // Menu panels open as popups over the chart instead of replacing it
+  const [openPanel, setOpenPanel] = useState<PanelRoute | null>(null);
   const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
   const [viewMode, setViewMode] = useState<'linear' | 'circular'>('circular');
+  // Plan mode is time-agnostic; Live mode adds the current-time hand and "now / next" readout
+  const [liveMode, setLiveMode] = useState(() => {
+    try {
+      return localStorage.getItem('liveMode') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const toggleLiveMode = () => {
+    setLiveMode((previous) => {
+      try {
+        localStorage.setItem('liveMode', String(!previous));
+      } catch {
+        // Storage unavailable (private mode); the toggle still works for this session
+      }
+      return !previous;
+    });
+  };
   const [showBlockList, setShowBlockList] = useState(true);
   const [blockListWidth, setBlockListWidth] = useState(280);
   const [viewportWidth, setViewportWidth] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 1024);
@@ -480,32 +505,8 @@ export default function Dashboard() {
             activeBlock={activeBlock}
             sidebarOpen={showBlockList}
             sidebarWidth={visibleBlockListWidth}
+            showNow={liveMode}
           />
-        </div>
-      )}
-
-      {currentRoute === 'schedules' && (
-        <div className="absolute inset-0 overflow-y-auto" style={{ paddingTop: 60 }}>
-          {user ? (
-            <SchedulesPage
-              user={user}
-              currentScheduleId={currentScheduleId}
-              onScheduleSelect={(id) => {
-                handleScheduleSelect(id);
-                setCurrentRoute('dashboard');
-              }}
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-              <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: 'var(--surface)' }}>
-                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>Sign In to View Schedules</h3>
-              <p style={{ color: 'var(--text-muted)' }}>Create an account to save and manage multiple schedules</p>
-            </div>
-          )}
         </div>
       )}
 
@@ -517,25 +518,6 @@ export default function Dashboard() {
             setMessages={setAiMessages}
             onApplySchedule={(newBlocks) => setTimeBlocks(newBlocks)}
           />
-        </div>
-      )}
-
-      {currentRoute === 'settings' && (
-        <div className="absolute inset-0 overflow-y-auto" style={{ paddingTop: 60 }}>
-          {user ? (
-            <SettingsPage user={user} timeBlocks={[]} currentScheduleName="" />
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-              <h3 className="text-xl font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>Sign In to Access Settings</h3>
-              <p style={{ color: 'var(--text-muted)' }}>Sign in to manage your profile and preferences</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {currentRoute === 'feedback' && (
-        <div className="absolute inset-0 overflow-y-auto" style={{ paddingTop: 60 }}>
-          <FeedbackPage user={user} />
         </div>
       )}
 
@@ -603,6 +585,36 @@ export default function Dashboard() {
           >
             Circular
           </button>
+
+          {/* Live mode toggle — circular only */}
+          {viewMode === 'circular' && (
+            <>
+              <div style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 4px', flexShrink: 0 }} />
+              <button
+                onClick={toggleLiveMode}
+                aria-pressed={liveMode}
+                className="border-none shadow-none rounded-full px-2.5 py-1 text-xs font-medium transition-colors flex items-center gap-1.5"
+                style={{
+                  background: liveMode ? 'rgba(239,68,68,0.1)' : 'transparent',
+                  color: liveMode ? '#dc2626' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  height: 24,
+                }}
+                title={liveMode ? 'Live: showing the current time' : 'Show the current time'}
+              >
+                <span className="relative flex" style={{ width: 6, height: 6 }}>
+                  {liveMode && (
+                    <span className="absolute inset-0 rounded-full bg-red-500 animate-ping motion-reduce:hidden" />
+                  )}
+                  <span
+                    className="relative rounded-full"
+                    style={{ width: 6, height: 6, background: liveMode ? '#ef4444' : 'var(--text-muted)', opacity: liveMode ? 1 : 0.6 }}
+                  />
+                </span>
+                Live
+              </button>
+            </>
+          )}
 
           {/* Export button — circular mode only, when blocks exist */}
           {viewMode === 'circular' && timeBlocks.length > 0 && (
@@ -865,11 +877,18 @@ export default function Dashboard() {
         {/* Nav items */}
         <nav className="flex-1 py-2">
           {drawerNavItems.map((item) => {
-            const isActive = currentRoute === item.route;
+            const isActive = isPanelRoute(item.route) ? openPanel === item.route : currentRoute === item.route && !openPanel;
             return (
               <button
                 key={item.route}
-                onClick={() => { setCurrentRoute(item.route); setShowDrawer(false); }}
+                onClick={() => {
+                  if (isPanelRoute(item.route)) {
+                    setOpenPanel(item.route);
+                  } else {
+                    setCurrentRoute(item.route);
+                  }
+                  setShowDrawer(false);
+                }}
                 className="w-full flex items-center gap-3 border-none shadow-none transition-colors rounded-none"
                 style={{
                   padding: '9px 20px',
@@ -1058,6 +1077,40 @@ export default function Dashboard() {
         />
       )}
 
+      {/* Menu panels */}
+      <AppDialog isOpen={openPanel === 'schedules'} onClose={() => setOpenPanel(null)} title="Your Schedules">
+        {user ? (
+          <SchedulesPage
+            user={user}
+            currentScheduleId={currentScheduleId}
+            onScheduleSelect={(id) => {
+              handleScheduleSelect(id);
+              setOpenPanel(null);
+            }}
+          />
+        ) : (
+          <PanelSignInPrompt
+            message="Create an account to save and manage multiple schedules."
+            onSignIn={() => { setOpenPanel(null); setShowSignInPrompt(true); }}
+          />
+        )}
+      </AppDialog>
+
+      <AppDialog isOpen={openPanel === 'settings'} onClose={() => setOpenPanel(null)} title="Settings">
+        {user ? (
+          <SettingsPage user={user} timeBlocks={[]} currentScheduleName="" />
+        ) : (
+          <PanelSignInPrompt
+            message="Sign in to manage your profile and export your schedules."
+            onSignIn={() => { setOpenPanel(null); setShowSignInPrompt(true); }}
+          />
+        )}
+      </AppDialog>
+
+      <AppDialog isOpen={openPanel === 'feedback'} onClose={() => setOpenPanel(null)} title="Share feedback">
+        <FeedbackPage user={user} />
+      </AppDialog>
+
       {/* Authentication modal for dashboard sign-in actions */}
       {showSignInPrompt && (
         <AuthButtons
@@ -1066,6 +1119,21 @@ export default function Dashboard() {
           onModalClose={() => setShowSignInPrompt(false)}
         />
       )}
+    </div>
+  );
+}
+
+function PanelSignInPrompt({ message, onSignIn }: { message: string; onSignIn: () => void }) {
+  return (
+    <div className="py-8 text-center">
+      <p className="mt-0 mb-5 text-sm" style={{ color: 'var(--text-muted)' }}>{message}</p>
+      <button
+        type="button"
+        onClick={onSignIn}
+        className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold border-none"
+      >
+        Sign in
+      </button>
     </div>
   );
 }
